@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Agent, fetch } from "undici";
 import Anthropic from "@anthropic-ai/sdk";
 import { logger } from "./logger.js";
 
@@ -13,6 +14,17 @@ const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? "qwen2.5:7b-instruct";
 const CLAUDE_MODEL = process.env.CLAUDE_MODEL ?? "claude-sonnet-5";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+// undici's default fetch() client has its OWN internal headersTimeout
+// (5 minutes) independent of any AbortSignal passed to fetch — CPU-only
+// Ollama inference on larger prompts can take longer than that to even start
+// streaming a response, so the default silently kills the request before our
+// own timeout ever gets a chance to. This agent raises both timeouts to
+// match what we actually expect from local inference.
+const ollamaAgent = new Agent({
+  headersTimeout: 900_000,
+  bodyTimeout: 900_000,
+});
 
 interface StructuredOptions<T> {
   system: string;
@@ -68,7 +80,8 @@ async function callOllama(system: string, prompt: string, schema: z.ZodType<unkn
       stream: false,
       options: { temperature: 0.4 },
     }),
-    signal: AbortSignal.timeout(180_000), // CPU inference is slow — generous timeout
+    dispatcher: ollamaAgent,
+    signal: AbortSignal.timeout(900_000), // CPU inference on a full 7B model can genuinely take many minutes on larger prompts
   });
 
   if (!res.ok) {

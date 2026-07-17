@@ -5,6 +5,7 @@ import * as Sentry from "@sentry/node";
 import { logger } from "./lib/logger.js";
 import { db, initDb } from "./lib/db.js";
 import { scrapeRouter } from "./routes/scrape.js";
+import { briefsRouter } from "./routes/briefs.js";
 
 const app = express();
 app.use(express.json());
@@ -33,6 +34,7 @@ app.get("/api/health", async (_req: Request, res: Response) => {
 });
 
 app.use("/api", scrapeRouter);
+app.use("/api", briefsRouter);
 
 // Deliberate test error — visit this once Sentry is configured to confirm errors reach it.
 app.get("/api/debug-error", () => {

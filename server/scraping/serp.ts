@@ -62,7 +62,41 @@ export async function fetchSerp(keyword: string, count = 10): Promise<SerpResult
   if (results.length === 0) {
     throw new Error("SERP returned 0 organic results — Bing page layout may have changed");
   }
+
+  if (looksLikeDictionaryOverride(results)) {
+    throw new Error(
+      `Bing returned dictionary/definition results instead of topical content for "${keyword}". ` +
+        "This happens with question-style or common-word-led queries (e.g. \"how do I...\", \"best...\") on " +
+        "Bing's non-JS search endpoint. Try a short noun-phrase keyword instead (e.g. \"residential proxies\" " +
+        "rather than \"how do residential proxies work\").",
+    );
+  }
+
   return results;
+}
+
+// Bing's non-JS HTML endpoint sometimes falls back to dictionary-definition
+// results for natural-language/question queries or ones led by a common word
+// (see server/scraping notes) instead of understanding the query's topic.
+// Detect that failure mode instead of silently feeding garbage "competitor"
+// data into the brief agent.
+const DICTIONARY_DOMAINS = [
+  "merriam-webster.com",
+  "dictionary.com",
+  "cambridge.org",
+  "collinsdictionary.com",
+  "thefreedictionary.com",
+  "wiktionary.org",
+  "oed.com",
+  "grammareer.com",
+];
+function looksLikeDictionaryOverride(results: SerpResult[]): boolean {
+  const top = results.slice(0, 6);
+  const dictionaryHits = top.filter((r) => {
+    const host = new URL(r.url).hostname.replace(/^www\./, "");
+    return DICTIONARY_DOMAINS.some((d) => host.endsWith(d)) || /definition\s*&?\s*meaning|english meaning/i.test(r.title);
+  });
+  return dictionaryHits.length >= 3;
 }
 
 // Bing wraps result links in a redirect: /ck/a?...&u=a1<base64-of-real-url>&...
