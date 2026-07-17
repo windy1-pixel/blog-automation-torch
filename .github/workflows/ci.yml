@@ -1,0 +1,48 @@
+name: CI
+
+# Runs on every push and pull request against main — catches broken code
+# before it merges. This is the "CI" half; Coolify handles deployment (CD)
+# separately once connected, by watching this repo directly.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  typecheck-and-build:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: blog_automation
+          POSTGRES_PASSWORD: ci_test_only
+          POSTGRES_DB: blog_automation
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://blog_automation:ci_test_only@localhost:5432/blog_automation
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Verify server boots and connects to the database
+        run: |
+          timeout 15s npm run dev &
+          sleep 6
+          curl --fail http://localhost:3000/api/health

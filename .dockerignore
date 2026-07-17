@@ -1,0 +1,10 @@
+node_modules
+dist
+logs
+data
+.env
+.git
+.github
+.claude
+reddit-monitor
+docker-compose.yml
