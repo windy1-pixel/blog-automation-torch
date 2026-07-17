@@ -1,0 +1,17 @@
+# Local development database — mirrors what Coolify will run in production.
+# Start it with: docker compose up -d
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: blog_automation
+      POSTGRES_PASSWORD: local_dev_only
+      POSTGRES_DB: blog_automation
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:

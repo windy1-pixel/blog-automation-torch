@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.env
+data/*.db
+data/*.db-*
+logs/
+
+# Unrelated local project living in this folder — not part of this repo
+reddit-monitor/
+
+# Local Claude Code session state
+.claude/
