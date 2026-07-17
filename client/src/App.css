@@ -1,0 +1,89 @@
+.app {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+  text-align: left;
+  font-family: system-ui, sans-serif;
+}
+
+h1 {
+  font-size: 1.75rem;
+  margin-bottom: 0.25rem;
+}
+
+.subtitle {
+  color: #888;
+  margin-bottom: 1.5rem;
+  font-size: 0.9rem;
+}
+
+.search-form {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.search-form input {
+  flex: 1;
+  padding: 0.6rem 0.8rem;
+  font-size: 1rem;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+}
+
+.search-form button {
+  padding: 0.6rem 1.2rem;
+  font-size: 1rem;
+  border-radius: 6px;
+  border: none;
+  background: #ff7623;
+  color: white;
+  cursor: pointer;
+}
+
+.search-form button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.status {
+  color: #888;
+}
+
+.status.error {
+  color: #e0393e;
+}
+
+.results section {
+  margin-bottom: 2rem;
+}
+
+.results h2 {
+  font-size: 1.1rem;
+  margin-bottom: 0.75rem;
+}
+
+.results ol {
+  padding-left: 1.25rem;
+}
+
+.results li {
+  margin-bottom: 0.75rem;
+}
+
+.snippet {
+  color: #888;
+  font-size: 0.85rem;
+  margin: 0.15rem 0 0;
+}
+
+.preview {
+  white-space: pre-wrap;
+  background: #1e1e1e;
+  color: #ddd;
+  padding: 1rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  max-height: 300px;
+  overflow-y: auto;
+}
