@@ -1,121 +1,57 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { api } from "./api";
+import type { BriefSummary } from "./types";
+import { NewBriefForm } from "./components/NewBriefForm";
+import { BriefList } from "./components/BriefList";
+import { BriefDetail } from "./components/BriefDetail";
 import "./App.css";
 
-interface SerpResult {
-  position: number;
-  title: string;
-  url: string;
-  snippet: string;
-}
-
-interface ExtractedArticle {
-  url: string;
-  title: string;
-  markdown: string;
-  headings: string[];
-  wordCount: number;
-}
-
-interface ScrapeResult {
-  keyword: string;
-  serp: SerpResult[];
-  topArticle: ExtractedArticle | null;
-}
-
 export default function App() {
-  const [keyword, setKeyword] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<ScrapeResult | null>(null);
+  const [briefs, setBriefs] = useState<BriefSummary[]>([]);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [listError, setListError] = useState<string | null>(null);
 
-  async function runScrape(e: React.FormEvent) {
-    e.preventDefault();
-    if (!keyword.trim()) return;
-
-    setLoading(true);
-    setError(null);
-    setResult(null);
+  const refreshList = useCallback(async () => {
     try {
-      const res = await fetch("/api/scrape/preview", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ keyword }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error ?? `Request failed (${res.status})`);
-      }
-      setResult(await res.json());
+      setBriefs(await api.listBriefs());
+      setListError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
-    } finally {
-      setLoading(false);
+      setListError(err instanceof Error ? err.message : "Failed to load briefs");
     }
+  }, []);
+
+  useEffect(() => {
+    refreshList();
+  }, [refreshList]);
+
+  function handleCreated(id: number) {
+    setSelectedId(id);
+    refreshList();
   }
 
   return (
     <div className="app">
-      <h1>Torch Blog Automation</h1>
-      <p className="subtitle">
-        Preview shell — this only runs the SERP scraper (milestone 3). The real Content Brief
-        agent (with consensus analysis) is next.
-      </p>
+      <header>
+        <h1>Torch Blog Automation</h1>
+        <p className="subtitle">Content Brief workspace — keyword → researched brief → review → approve</p>
+      </header>
 
-      <form onSubmit={runScrape} className="search-form">
-        <input
-          type="text"
-          value={keyword}
-          onChange={(e) => setKeyword(e.target.value)}
-          placeholder="e.g. residential proxies"
-          disabled={loading}
-        />
-        <button type="submit" disabled={loading || !keyword.trim()}>
-          {loading ? "Scraping..." : "Scrape"}
-        </button>
-      </form>
+      <div className="layout">
+        <aside>
+          <NewBriefForm onCreated={handleCreated} />
+          <h2 className="list-heading">Briefs</h2>
+          {listError && <p className="error">{listError}</p>}
+          <BriefList briefs={briefs} selectedId={selectedId} onSelect={setSelectedId} />
+        </aside>
 
-      {loading && <p className="status">Fetching SERP results and extracting the top article...</p>}
-      {error && <p className="status error">Error: {error}</p>}
-
-      {result && (
-        <div className="results">
-          <section>
-            <h2>SERP results for "{result.keyword}"</h2>
-            <ol>
-              {result.serp.map((r) => (
-                <li key={r.url}>
-                  <a href={r.url} target="_blank" rel="noreferrer">
-                    {r.title}
-                  </a>
-                  <p className="snippet">{r.snippet}</p>
-                </li>
-              ))}
-            </ol>
-          </section>
-
-          {result.topArticle && (
-            <section>
-              <h2>Top result extracted</h2>
-              <p>
-                <strong>{result.topArticle.title}</strong> — {result.topArticle.wordCount} words,{" "}
-                {result.topArticle.headings.length} headings
-              </p>
-              <details>
-                <summary>Headings</summary>
-                <ul>
-                  {result.topArticle.headings.map((h, i) => (
-                    <li key={i}>{h}</li>
-                  ))}
-                </ul>
-              </details>
-              <details>
-                <summary>Content preview</summary>
-                <pre className="preview">{result.topArticle.markdown.slice(0, 1000)}</pre>
-              </details>
-            </section>
+        <main>
+          {selectedId === null ? (
+            <p className="muted placeholder">Select a brief on the left, or create a new one.</p>
+          ) : (
+            <BriefDetail id={selectedId} onChanged={refreshList} />
           )}
-        </div>
-      )}
+        </main>
+      </div>
     </div>
   );
 }

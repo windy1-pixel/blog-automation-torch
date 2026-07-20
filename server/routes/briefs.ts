@@ -50,6 +50,38 @@ briefsRouter.get("/briefs", async (_req: Request, res: Response) => {
   res.json(result.rows);
 });
 
+// Save human edits to a brief and/or approve it for writing. The review step:
+// a person can adjust the generated brief (outline, must-cover topics, etc.)
+// before it becomes the contract the writer works from. Only "ready" or
+// already-"approved" briefs can be edited/approved — you can't approve one
+// that's still researching or failed.
+briefsRouter.patch("/briefs/:id", async (req: Request, res: Response) => {
+  const existing = await db.query<{ status: string; brief: unknown }>(
+    "SELECT status, brief FROM briefs WHERE id = $1",
+    [req.params.id],
+  );
+  if (existing.rows.length === 0) {
+    res.status(404).json({ error: "brief not found" });
+    return;
+  }
+  const current = existing.rows[0];
+  if (current.status !== "ready" && current.status !== "approved") {
+    res.status(409).json({ error: `cannot edit a brief with status "${current.status}"` });
+    return;
+  }
+
+  // brief: the edited brief JSON (optional). approve: set status to "approved".
+  const editedBrief = req.body?.brief ?? current.brief;
+  const approve = req.body?.approve === true;
+  const newStatus = approve ? "approved" : current.status;
+
+  const updated = await db.query(
+    "UPDATE briefs SET brief = $1, status = $2, updated_at = now() WHERE id = $3 RETURNING *",
+    [editedBrief, newStatus, req.params.id],
+  );
+  res.json(updated.rows[0]);
+});
+
 async function processBrief(id: number, input: { keyword: string; audience?: string; notes?: string }) {
   await db.query("UPDATE briefs SET status = 'researching', updated_at = now() WHERE id = $1", [id]);
   logger.info({ id, keyword: input.keyword }, "brief: processing started");

@@ -27,17 +27,22 @@ export async function fetchSerp(keyword: string, count = 10): Promise<SerpResult
   logger.info({ keyword, provider: "bing" }, "SERP: fetching results");
   const start = Date.now();
 
-  const res = await fetch(url, {
-    headers: BROWSER_HEADERS,
-    dispatcher: getProxyAgent({ freshSession: true }), // new exit IP per search
-    signal: AbortSignal.timeout(30_000),
+  // The Torch proxy intermittently rejects the initial tunnel with a 562, and
+  // connections can reset. These are transient, so retry with a FRESH proxy
+  // session (new exit IP) before giving up — one bad session shouldn't kill
+  // the whole brief.
+  const html = await withRetry(3, async () => {
+    const res = await fetch(url, {
+      headers: BROWSER_HEADERS,
+      dispatcher: getProxyAgent({ freshSession: true }),
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!res.ok) {
+      throw new Error(`Bing SERP request failed with status ${res.status}`);
+    }
+    return res.text();
   });
-  const html = await res.text();
-  logger.info({ keyword, status: res.status, bytes: html.length, ms: Date.now() - start }, "SERP: response received");
-
-  if (!res.ok) {
-    throw new Error(`Bing SERP request failed with status ${res.status}`);
-  }
+  logger.info({ keyword, bytes: html.length, ms: Date.now() - start }, "SERP: response received");
 
   const $ = cheerio.load(html);
   const results: SerpResult[] = [];
@@ -97,6 +102,25 @@ function looksLikeDictionaryOverride(results: SerpResult[]): boolean {
     return DICTIONARY_DOMAINS.some((d) => host.endsWith(d)) || /definition\s*&?\s*meaning|english meaning/i.test(r.title);
   });
   return dictionaryHits.length >= 3;
+}
+
+// Retries a transient operation with a short backoff. Used to ride out the
+// Torch proxy's occasional 562 tunnel rejections and connection resets, each
+// attempt getting a fresh proxy session from the caller.
+async function withRetry<T>(attempts: number, fn: () => Promise<T>): Promise<T> {
+  let lastError: unknown;
+  for (let i = 1; i <= attempts; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err;
+      if (i < attempts) {
+        logger.warn({ attempt: i, attempts, error: String((err as Error)?.message ?? err) }, "SERP: transient fetch error, retrying with fresh session");
+        await new Promise((r) => setTimeout(r, 1000 * i));
+      }
+    }
+  }
+  throw lastError;
 }
 
 // Bing wraps result links in a redirect: /ck/a?...&u=a1<base64-of-real-url>&...

@@ -8,8 +8,9 @@ export default defineConfig({
     port: 5173,
     // Forward /api requests to the Express backend so the browser only
     // ever talks to one origin during development.
+    // Backend port (default 3000; override with BACKEND_PORT for local conflicts).
     proxy: {
-      '/api': 'http://localhost:3000',
+      '/api': `http://localhost:${process.env.BACKEND_PORT ?? 3000}`,
     },
   },
 })
