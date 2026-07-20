@@ -1,5 +1,8 @@
 :root {
-  color-scheme: light dark;
+  /* The app is a light-themed design with hardcoded white surfaces. Letting the
+     browser switch form controls to dark mode made input TEXT render white on
+     those white backgrounds (invisible). Pin to light so controls match. */
+  color-scheme: light;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;

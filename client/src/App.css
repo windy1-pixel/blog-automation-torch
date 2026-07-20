@@ -84,6 +84,15 @@ textarea {
   border: 1px solid var(--border);
   border-radius: 6px;
   background: #fff;
+  /* Explicit — without this, form controls inherit the browser's theme text
+     colour and render white-on-white in dark mode. */
+  color: var(--text);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #9a9a9a;
+  opacity: 1;
 }
 
 input:focus,
