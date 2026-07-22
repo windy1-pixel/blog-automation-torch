@@ -10,3 +10,4 @@ reddit-monitor/
 
 # Local Claude Code session state
 .claude/
+try-openserp.sh
