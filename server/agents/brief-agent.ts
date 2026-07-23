@@ -20,30 +20,48 @@ export interface BriefAgentInput {
 export async function runBriefAgent(input: BriefAgentInput): Promise<BriefRunResult> {
   const { keyword, audience, notes } = input;
 
-  logger.info({ keyword }, "brief agent: fetching SERP");
-  const serp = await fetchSerp(keyword, 10);
+  // Fetch the SERP and extract competitor articles. Bing occasionally serves a
+  // junk/fallback page (once returned 10 Reddit GIF subreddits for "mobile
+  // proxies") and competitor sites intermittently block a proxy session, so a
+  // whole SERP set can extract to nothing on a bad run. Both are transient, so
+  // if we end up with zero usable sources we refetch the SERP with a fresh
+  // proxy session and try again before failing the brief.
+  const SERP_ATTEMPTS = 2;
+  let sourcesAnalyzed: { url: string; title: string; wordCount: number; headings: string[] }[] = [];
+  let sourcesFailed: { url: string; reason: string }[] = [];
 
-  logger.info({ keyword, count: serp.length }, "brief agent: extracting competitor articles");
-  const extractions = await Promise.allSettled(serp.map((r) => extractArticle(r.url)));
+  for (let attempt = 1; attempt <= SERP_ATTEMPTS; attempt++) {
+    logger.info({ keyword, attempt }, "brief agent: fetching SERP");
+    const serp = await fetchSerp(keyword, 10); // fetchSerp already rotates the proxy session each call
 
-  const sourcesAnalyzed: { url: string; title: string; wordCount: number; headings: string[] }[] = [];
-  const sourcesFailed: { url: string; reason: string }[] = [];
+    logger.info({ keyword, count: serp.length }, "brief agent: extracting competitor articles");
+    const extractions = await Promise.allSettled(serp.map((r) => extractArticle(r.url)));
 
-  extractions.forEach((result, i) => {
-    if (result.status === "fulfilled") {
-      sourcesAnalyzed.push({
-        url: result.value.url,
-        title: result.value.title,
-        wordCount: result.value.wordCount,
-        headings: result.value.headings,
-      });
-    } else {
-      sourcesFailed.push({ url: serp[i].url, reason: String(result.reason?.message ?? result.reason) });
-    }
-  });
+    sourcesAnalyzed = [];
+    sourcesFailed = [];
+    extractions.forEach((result, i) => {
+      if (result.status === "fulfilled") {
+        sourcesAnalyzed.push({
+          url: result.value.url,
+          title: result.value.title,
+          wordCount: result.value.wordCount,
+          headings: result.value.headings,
+        });
+      } else {
+        sourcesFailed.push({ url: serp[i].url, reason: String(result.reason?.message ?? result.reason) });
+      }
+    });
+
+    if (sourcesAnalyzed.length > 0) break;
+    logger.warn({ keyword, attempt, of: SERP_ATTEMPTS }, "brief agent: no sources extracted, retrying with a fresh SERP");
+  }
 
   if (sourcesAnalyzed.length === 0) {
-    throw new Error("Could not extract content from any competitor result — cannot build a brief");
+    throw new Error(
+      "Could not extract content from any competitor result after retrying. The search engine may be " +
+        "returning irrelevant results for this keyword right now, or the competitor sites blocked the " +
+        "requests. Try again in a moment, or rephrase the keyword as a short noun phrase.",
+    );
   }
   logger.info(
     { keyword, analyzed: sourcesAnalyzed.length, failed: sourcesFailed.length },
