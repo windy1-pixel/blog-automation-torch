@@ -71,6 +71,21 @@ export function knowledgeForWriter(): string {
     + section("INTERNAL LINKING RULES", k.internalLinks);
 }
 
+/**
+ * Trimmed bundle for per-section writing calls. A full article makes one call
+ * per section, so shipping the whole 40k-char library each time is slow and
+ * expensive on hosted models. Sections need the rules that govern prose:
+ * what may be claimed (facts), how to sound (voice), and what's banned (style).
+ * Exemplar articles and the link map shape the PLAN, not individual paragraphs,
+ * so they're excluded here and applied at planning time instead.
+ */
+export function knowledgeForSection(): string {
+  const k = loadKnowledge();
+  return section("PRODUCT FACTS (the ONLY approved source for product claims)", k.productFacts)
+    + section("BRAND VOICE", k.brandVoice)
+    + section("STYLE GUIDE (mechanical rules, banned phrases, required signals)", k.styleGuide);
+}
+
 /** Strategy context for the brief/research stages. */
 export function knowledgeForBrief(): string {
   const k = loadKnowledge();

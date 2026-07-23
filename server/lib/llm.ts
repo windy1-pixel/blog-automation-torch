@@ -185,7 +185,10 @@ async function callOpenAICompatible(
         { role: "user", content: prompt },
       ],
     }),
-    signal: AbortSignal.timeout(120_000),
+    // Free-tier hosted models are queued and slow: successful calls have been
+    // observed taking up to ~110s, so a 2-minute ceiling was cutting off
+    // responses that were about to arrive.
+    signal: AbortSignal.timeout(Number(process.env.OPENAI_TIMEOUT_MS ?? 300_000)),
   });
 
   if (!res.ok) {

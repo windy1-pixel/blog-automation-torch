@@ -52,3 +52,55 @@ export interface BriefRunResult {
   };
   brief: ContentBrief;
 }
+
+// ---------------------------------------------------------------------------
+// Content Writer
+// ---------------------------------------------------------------------------
+
+// Article front matter, generated before any body prose. Structure and rules
+// come from data/knowledge/style-guide.md.
+export const ArticlePlanSchema = z.object({
+  h1: z.string().describe("H1 title; includes the primary keyword and the year 2026"),
+  subtitle: z
+    .string()
+    .describe("One line under the H1 naming the reader's actual situation. Punchy, never generic"),
+  author: z
+    .string()
+    .describe("Author full name, chosen from the approved author list to match the article type"),
+  authorRole: z.string().describe("That author's role, exactly as listed"),
+  metaTitle: z.string().describe("55-60 characters, keyword near the start"),
+  metaDescription: z.string().describe("150-160 characters, keyword plus a hook. Never placeholder text"),
+  tldr: z
+    .string()
+    .describe(
+      "TL;DR block with substantive claims, not teasers. Three parts: value statement, scope declaration, invitation",
+    ),
+  sections: z
+    .array(
+      z.object({
+        heading: z.string().describe("H2 heading"),
+        purpose: z.string().describe("What this section must establish"),
+        includeTable: z.boolean().describe("Whether this section should contain a comparison table"),
+      }),
+    )
+    .describe("5-8 H2 sections in order"),
+  faq: z
+    .array(z.string())
+    .describe("5+ questions phrased exactly as a user would type them into Google or ChatGPT"),
+});
+export type ArticlePlan = z.infer<typeof ArticlePlanSchema>;
+
+// One generated body section.
+export const ArticleSectionSchema = z.object({
+  heading: z.string(),
+  markdown: z.string().describe("The section body in Markdown, excluding the H2 heading line"),
+});
+export type ArticleSection = z.infer<typeof ArticleSectionSchema>;
+
+export interface ArticleRunResult {
+  plan: ArticlePlan;
+  markdown: string;
+  meta: { metaTitle: string; metaDescription: string; slug: string };
+  wordCount: number;
+  qualityIssues: { severity: string; rule: string; detail: string }[];
+}
