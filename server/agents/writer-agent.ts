@@ -75,19 +75,45 @@ export async function runWriterAgent(input: WriterInput): Promise<ArticleRunResu
   );
 
   // --- 2. Write each section on its own -------------------------------------
+  // Free hosted models hang unpredictably (observed: some calls return in 20s,
+  // others never return). A single bad section must not destroy a run that has
+  // already spent many minutes, so a section that fails outright is recorded as
+  // a gap and the article continues. The gap is surfaced as a quality issue so
+  // nobody mistakes a half-written draft for a finished one.
   const written: { heading: string; markdown: string }[] = [];
+  const failedSections: string[] = [];
+
   for (const [i, section] of plan.sections.entries()) {
-    const md = await writeSection({ plan, section, index: i, brief, keyword, knowledge, written });
-    written.push({ heading: section.heading, markdown: md });
-    logger.info(
-      { keyword, section: i + 1, of: plan.sections.length, words: md.split(/\s+/).length },
-      "writer: section done",
-    );
+    try {
+      const md = await writeSection({ plan, section, index: i, brief, keyword, knowledge, written });
+      written.push({ heading: section.heading, markdown: md });
+      logger.info(
+        { keyword, section: i + 1, of: plan.sections.length, words: md.split(/\s+/).length },
+        "writer: section done",
+      );
+    } catch (err) {
+      const reason = String((err as Error)?.message ?? err);
+      logger.error({ keyword, section: i + 1, of: plan.sections.length, err }, "writer: section failed, continuing");
+      failedSections.push(section.heading);
+      written.push({
+        heading: section.heading,
+        markdown: `> **[Section not generated]** The model failed to return this section (${reason}). Regenerate the draft or write this section manually.`,
+      });
+    }
   }
 
   // --- 3. FAQ and conclusion ------------------------------------------------
-  const faqBlock = await writeFaq({ plan, keyword, knowledge });
-  const conclusion = await writeConclusion({ plan, keyword, knowledge, written });
+  // Same tolerance: these are worth having but not worth losing the body over.
+  const faqBlock = await writeFaq({ plan, keyword, knowledge }).catch((err) => {
+    logger.error({ keyword, err }, "writer: FAQ failed, continuing");
+    failedSections.push("FAQ");
+    return "> **[FAQ not generated]** Regenerate the draft to produce it.";
+  });
+  const conclusion = await writeConclusion({ plan, keyword, knowledge, written }).catch((err) => {
+    logger.error({ keyword, err }, "writer: conclusion failed, continuing");
+    failedSections.push("Conclusion");
+    return "> **[Conclusion not generated]** Regenerate the draft to produce it.";
+  });
 
   // --- 4. Assemble ----------------------------------------------------------
   const markdown = sanitizeMechanical(assemble(plan, written, faqBlock, conclusion));
@@ -96,6 +122,16 @@ export async function runWriterAgent(input: WriterInput): Promise<ArticleRunResu
   // Whole-article checks: the Layer 3 signals can only be judged across the
   // finished piece, not per section.
   const qualityIssues: QualityIssue[] = [...checkStyle(markdown), ...checkLayer3Signals(markdown)];
+
+  // Surface incomplete generation loudly: a draft with holes must never look
+  // finished just because it has a word count.
+  for (const heading of failedSections) {
+    qualityIssues.unshift({
+      severity: "fail",
+      rule: "incomplete-section",
+      detail: `"${heading}" was not generated`,
+    });
+  }
   logger.info({ keyword, wordCount, issues: qualityIssues.length }, "writer: article assembled");
 
   return {

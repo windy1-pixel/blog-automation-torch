@@ -54,3 +54,46 @@ export interface BriefSummary {
   created_at: string;
   updated_at: string;
 }
+
+// --- Articles ---------------------------------------------------------------
+
+export interface QualityIssue {
+  severity: "fail" | "warn";
+  rule: string;
+  detail: string;
+}
+
+export interface ArticleMeta {
+  metaTitle: string;
+  metaDescription: string;
+  slug: string;
+  author: string;
+  authorRole: string;
+  subtitle: string;
+  wordCount: number;
+  qualityIssues: QualityIssue[];
+}
+
+export type ArticleStatus = "pending" | "writing" | "draft" | "failed";
+
+export interface Article {
+  id: number;
+  brief_id: number;
+  title: string | null;
+  markdown: string | null;
+  meta: ArticleMeta | null;
+  status: ArticleStatus;
+  error: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ArticleSummary {
+  id: number;
+  brief_id: number;
+  keyword: string;
+  title: string | null;
+  status: ArticleStatus;
+  created_at: string;
+  updated_at: string;
+}

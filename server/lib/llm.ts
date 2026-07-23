@@ -188,7 +188,7 @@ async function callOpenAICompatible(
     // Free-tier hosted models are queued and slow: successful calls have been
     // observed taking up to ~110s, so a 2-minute ceiling was cutting off
     // responses that were about to arrive.
-    signal: AbortSignal.timeout(Number(process.env.OPENAI_TIMEOUT_MS ?? 300_000)),
+    signal: AbortSignal.timeout(Number(process.env.OPENAI_TIMEOUT_MS ?? 150_000)),
   });
 
   if (!res.ok) {
@@ -200,7 +200,66 @@ async function callOpenAICompatible(
     throw new Error(`OpenAI-compatible response had no content: ${JSON.stringify(data).slice(0, 300)}`);
   }
   logger.info({ provider: "openai", schemaName, ms: Date.now() - start }, "LLM: response received");
-  // Some models wrap JSON in ```json fences despite instructions — strip them.
-  const cleaned = content.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
-  return JSON.parse(cleaned);
+  return extractJson(content);
+}
+
+/**
+ * Pulls a JSON object out of a model response.
+ *
+ * Free hosted models don't reliably honour json_object mode. Reasoning models
+ * in particular emit their chain of thought first ("We need to output JSON with
+ * keys..."), and others wrap the object in ```json fences or add a sentence of
+ * commentary. Rather than fight each variant, take the outermost {...} block,
+ * which is the actual payload in every case observed.
+ */
+function extractJson(content: string): unknown {
+  const text = content.trim();
+
+  // Fast path: already clean JSON.
+  try {
+    return JSON.parse(text);
+  } catch {
+    // fall through to extraction
+  }
+
+  // Strip code fences if present, then retry.
+  const unfenced = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+  try {
+    return JSON.parse(unfenced);
+  } catch {
+    // fall through to brace scan
+  }
+
+  // Take the outermost balanced {...}, ignoring braces inside strings.
+  const start = unfenced.indexOf("{");
+  if (start === -1) {
+    throw new Error(`No JSON object found in model response: ${text.slice(0, 200)}`);
+  }
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < unfenced.length; i++) {
+    const ch = unfenced[i];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (ch === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+    if (ch === "{") depth++;
+    else if (ch === "}") {
+      depth--;
+      if (depth === 0) {
+        return JSON.parse(unfenced.slice(start, i + 1));
+      }
+    }
+  }
+  throw new Error(`Unbalanced JSON object in model response: ${text.slice(0, 200)}`);
 }

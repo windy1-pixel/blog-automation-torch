@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import type { Brief, ContentBrief } from "../types";
+import { ArticleWorkflow } from "./ArticleWorkflow";
 
 // Poll while a brief is still being generated; stop once it reaches a terminal
 // state. CPU inference is slow, so this can legitimately run for minutes.
@@ -205,6 +206,9 @@ function BriefEditor({ brief, onChanged }: { brief: Brief; onChanged: () => void
           {approved ? "Save & keep approved" : "Approve for writing"}
         </button>
       </div>
+
+      {/* Writing is only offered once a human has approved the brief. */}
+      {approved && <ArticleWorkflow briefId={brief.id} />}
     </div>
   );
 }

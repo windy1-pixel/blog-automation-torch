@@ -253,3 +253,80 @@ button.remove {
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+/* --- Article workflow & draft viewer -------------------------------------- */
+
+.article-workflow {
+  margin-top: 1.5rem;
+  border-top: 2px solid var(--border);
+  padding-top: 1.25rem;
+}
+
+.workflow-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+.workflow-header h3 { margin: 0; font-size: 1rem; }
+
+.draft-tabs { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
+.draft-tab {
+  background: #f0f0f0; color: #333; font-size: 0.8rem;
+  padding: 0.35rem 0.7rem; display: flex; gap: 0.4rem; align-items: center;
+}
+.draft-tab.selected { background: #fff7f2; border: 1px solid var(--orange); }
+
+.article-byline { color: var(--muted); font-size: 0.85rem; margin: 0 0 1rem; }
+
+.meta-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem; margin-bottom: 1rem;
+}
+.meta-grid p { margin: 0.15rem 0 0; font-size: 0.85rem; }
+.meta-label {
+  font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--muted); font-weight: 600;
+}
+.mono { font-family: ui-monospace, Consolas, monospace; }
+
+.quality { border-radius: 8px; padding: 0.75rem 0.9rem; margin-bottom: 1rem; font-size: 0.85rem; }
+.quality ul { margin: 0.5rem 0 0; padding-left: 1.1rem; }
+.quality li { margin-bottom: 0.2rem; }
+.quality-pass { background: #e4f7ec; color: #146c3a; }
+.quality-warn { background: #fff4e0; color: #8a5300; }
+.quality-fail { background: #fde8e8; color: #a01c20; }
+
+.badge {
+  font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
+  padding: 0.05rem 0.35rem; border-radius: 3px; margin-right: 0.3rem;
+}
+.badge-fail { background: var(--error); color: #fff; }
+.badge-warn { background: #d68910; color: #fff; }
+
+/* The rendered draft, styled to read like an article rather than a form */
+.draft {
+  margin-top: 1.25rem; padding-top: 1.25rem; border-top: 1px solid var(--border);
+  line-height: 1.65;
+}
+.draft h1 { font-size: 1.5rem; margin: 0 0 0.5rem; }
+.draft h2 { font-size: 1.15rem; margin: 1.75rem 0 0.6rem; }
+.draft h3 { font-size: 1rem; margin: 1.25rem 0 0.4rem; }
+.draft p { margin: 0 0 0.9rem; }
+.draft ul, .draft ol { margin: 0 0 0.9rem; padding-left: 1.3rem; }
+.draft li { margin-bottom: 0.3rem; }
+.draft table {
+  border-collapse: collapse; width: 100%; margin: 0 0 1rem; font-size: 0.85rem;
+  display: block; overflow-x: auto;
+}
+.draft th, .draft td { border: 1px solid var(--border); padding: 0.45rem 0.6rem; text-align: left; }
+.draft th { background: #f7f7f7; font-weight: 600; }
+.draft code {
+  background: #f4f4f4; padding: 0.1rem 0.3rem; border-radius: 3px;
+  font-family: ui-monospace, Consolas, monospace; font-size: 0.85em;
+}
+.draft pre { background: #1e1e1e; color: #ddd; padding: 0.9rem; border-radius: 6px; overflow-x: auto; }
+.draft pre code { background: none; color: inherit; }
+.draft blockquote {
+  border-left: 3px solid var(--orange); margin: 0 0 0.9rem; padding-left: 0.9rem; color: #555;
+}

@@ -1,4 +1,4 @@
-import type { Brief, BriefSummary, ContentBrief } from "./types";
+import type { Article, ArticleSummary, Brief, BriefSummary, ContentBrief } from "./types";
 
 async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {
@@ -28,4 +28,10 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(input),
     }),
+  listArticles: () => jsonFetch<ArticleSummary[]>("/api/articles"),
+
+  getArticle: (id: number) => jsonFetch<Article>(`/api/articles/${id}`),
+
+  generateArticle: (briefId: number) =>
+    jsonFetch<{ id: number; status: string }>(`/api/briefs/${briefId}/article`, { method: "POST" }),
 };
