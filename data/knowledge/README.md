@@ -1,26 +1,22 @@
-# Knowledge Library — maintainer guide
+# Knowledge Library
 
-These Markdown files are the **single source of truth** for every factual claim
-the Content Writer is allowed to make about Torch Proxies — product specs, IP
-pool sizes, locations, protocols, pricing, and internal-link URLs.
+The curated context that governs what the agents may say and how they say it.
+These are TorchProxies' real working documents, synced from the team's context
+folder — **edit the source docs, then run `npm run sync:knowledge`**, don't edit
+these copies directly (they get overwritten).
 
-## Why this exists
+| File | Governs | Used by |
+|---|---|---|
+| `features.md` | Products, prices, pool sizes, ISP country/use-case matrix, approved claims, CTA mapping | Writer (the ONLY source of product claims) |
+| `brand-voice.md` | Positioning, author voices, the six required humanisation signals, audience segments | Writer |
+| `style-guide.md` | Structure, sentence mechanics, banned phrases/words, Layer 3 signals, meta rules | Writer |
+| `writing-examples.md` | Three exemplar articles with "what to copy" notes | Writer |
+| `internal-links-map.md` | Slug rule (root-level only), hub pages, do-not-link list, anchor text rules | Writer |
+| `target-keywords.md` | Clusters, priorities, intent classification, do-not-write list | Brief / keyword stages |
+| `competitor-analysis.md` | Competitive map, content gaps, per-article recon SOP | Brief stage |
 
-The writer is instructed to state Torch Proxies product facts **only** from
-these files, and to never invent specs or copy claims from competitor pages.
-If a fact isn't written here, the article won't state it. This is the fix for
-the old workflow, which told the model to swap competitor claims onto our brand
-(producing false specs about our own product).
+## The rule that matters most
 
-## How to edit
-
-- One file per topic. `00-brand.md` loads first (company voice + link rules),
-  then product files alphabetically.
-- **State only confirmed facts.** If you're unsure of a number, leave it out —
-  an omitted fact is safe; a wrong one ships in published articles.
-- Lines beginning `> **TODO (maintainer):**` mark gaps to fill in. The writer is
-  told to ignore TODO lines, so they're safe to leave, but every filled-in TODO
-  makes articles richer and more specific.
-- Keep internal-link URLs current — the writer uses these verbatim for links.
-
-Files are plain Markdown; edit them in any text editor and save.
+Product claims come **only** from `features.md`. The writer never invents a
+statistic and never attributes a competitor's spec to TorchProxies. If a fact
+isn't in `features.md`, the article doesn't state it.

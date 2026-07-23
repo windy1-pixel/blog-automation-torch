@@ -12,7 +12,8 @@
     "dev:client": "cross-env BACKEND_PORT=3100 npm --prefix client run dev",
     "typecheck": "tsc --noEmit",
     "build": "tsc",
-    "start": "node --import ./dist/instrument.js dist/index.js"
+    "start": "node --import ./dist/instrument.js dist/index.js",
+    "sync:knowledge": "node scripts/sync-knowledge.mjs"
   },
   "keywords": [],
   "author": "",
