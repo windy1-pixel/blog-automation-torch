@@ -43,6 +43,20 @@ app.get("/api/debug-error", () => {
   throw new Error("Test error: if you can see this in Sentry, error tracking works!");
 });
 
+// In production the built React app is served by this same server, so the whole
+// thing is one container on one origin (and the client's relative /api calls
+// just work). In dev the client runs on Vite with its own proxy, so this is
+// skipped. CLIENT_DIST points at the copied Vite build (see Dockerfile).
+if (process.env.NODE_ENV === "production") {
+  const clientDist = process.env.CLIENT_DIST ?? "client/dist";
+  app.use(express.static(clientDist));
+  // SPA fallback: any non-API GET returns index.html so client routing works.
+  app.get(/^(?!\/api\/).*/, (_req: Request, res: Response) => {
+    res.sendFile("index.html", { root: clientDist });
+  });
+  logger.info({ clientDist }, "serving built client");
+}
+
 // Sentry error handler — reports any unhandled route error to Sentry.
 Sentry.setupExpressErrorHandler(app);
 

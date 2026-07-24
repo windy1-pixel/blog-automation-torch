@@ -1,7 +1,8 @@
 node_modules
 dist
 logs
-data
+data/*.db
+data/*.db-*
 .env
 .git
 .github
