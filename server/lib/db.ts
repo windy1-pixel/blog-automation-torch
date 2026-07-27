@@ -40,6 +40,15 @@ export async function initDb() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+
+    -- Runtime configuration editable from the Settings UI (LLM provider, API
+    -- keys, proxy credentials). Resolves DB > env var > default, so DATABASE_URL
+    -- is the only value that must be a deployment env var.
+    CREATE TABLE IF NOT EXISTS settings (
+      key        TEXT PRIMARY KEY,
+      value      TEXT NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
   `);
 
   logger.info("database ready (Postgres)");

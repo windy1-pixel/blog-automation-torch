@@ -4,12 +4,14 @@ import type { BriefSummary } from "./types";
 import { NewBriefForm } from "./components/NewBriefForm";
 import { BriefList } from "./components/BriefList";
 import { BriefDetail } from "./components/BriefDetail";
+import { Settings } from "./components/Settings";
 import "./App.css";
 
 export default function App() {
   const [briefs, setBriefs] = useState<BriefSummary[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [listError, setListError] = useState<string | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
 
   const refreshList = useCallback(async () => {
     try {
@@ -31,10 +33,17 @@ export default function App() {
 
   return (
     <div className="app">
-      <header>
-        <h1>Torch Blog Automation</h1>
-        <p className="subtitle">Content Brief workspace — keyword → researched brief → review → approve</p>
+      <header className="app-header">
+        <div>
+          <h1>Torch Blog Automation</h1>
+          <p className="subtitle">Content Brief workspace — keyword → researched brief → review → approve</p>
+        </div>
+        <button type="button" className="secondary" onClick={() => setShowSettings(true)}>
+          Settings
+        </button>
       </header>
+
+      {showSettings && <Settings onClose={() => setShowSettings(false)} />}
 
       <div className="layout">
         <aside>

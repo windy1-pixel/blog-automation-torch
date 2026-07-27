@@ -97,3 +97,13 @@ export interface ArticleSummary {
   created_at: string;
   updated_at: string;
 }
+
+// --- Settings ---------------------------------------------------------------
+
+export interface SettingView {
+  key: string;
+  label: string;
+  secret: boolean;
+  value: string;       // resolved value for non-secrets; "" for secrets
+  configured: boolean; // whether a usable value is set (DB or env)
+}

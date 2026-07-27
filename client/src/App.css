@@ -330,3 +330,23 @@ button.remove {
 .draft blockquote {
   border-left: 3px solid var(--orange); margin: 0 0 0.9rem; padding-left: 0.9rem; color: #555;
 }
+
+/* --- Settings -------------------------------------------------------------- */
+.app-header { display: flex; justify-content: space-between; align-items: flex-start; }
+
+.settings-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 3rem 1rem; z-index: 50; overflow-y: auto;
+}
+.settings-panel {
+  background: var(--card); border-radius: 10px; padding: 1.5rem;
+  width: 100%; max-width: 560px;
+}
+.settings-list { display: flex; flex-direction: column; gap: 0.9rem; margin: 1rem 0; }
+.settings-badge {
+  font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
+  padding: 0.05rem 0.4rem; border-radius: 3px; margin-left: 0.5rem;
+}
+.settings-badge.set { background: #e4f7ec; color: var(--green); }
+.settings-badge.unset { background: #fde8e8; color: var(--error); }

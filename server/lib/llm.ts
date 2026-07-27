@@ -2,27 +2,19 @@ import { z } from "zod";
 import { Agent, fetch } from "undici";
 import Anthropic from "@anthropic-ai/sdk";
 import { logger } from "./logger.js";
+import { getSetting } from "./settings.js";
 
 // Single entry point every agent uses to talk to an LLM. Which model actually
-// answers is controlled by LLM_PROVIDER in .env:
+// answers is controlled by the LLM_PROVIDER setting (DB > env > default):
 //   - "openai"  → any OpenAI-compatible hosted API (OpenRouter, Groq, Cerebras,
 //                 Together…) running an open-source model. Free tiers, fast,
 //                 no local hardware needed. This is the recommended default.
 //   - "ollama"  → fully local/offline (slow on CPU-only machines).
 //   - "claude"  → Anthropic (paid, highest quality) for scaling up.
-// Agents never call a provider directly, so switching is one env var.
-const PROVIDER = process.env.LLM_PROVIDER ?? "openai";
+// Agents never call a provider directly; config is read per-call so the
+// Settings UI can change it without a restart.
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL ?? "http://localhost:11434";
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? "qwen2.5:7b-instruct";
-const CLAUDE_MODEL = process.env.CLAUDE_MODEL ?? "claude-sonnet-5";
-
-// OpenAI-compatible provider config. Defaults target OpenRouter's free tier;
-// point OPENAI_BASE_URL elsewhere (e.g. Groq) to switch providers.
-const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL ?? "https://openrouter.ai/api/v1";
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY ?? "";
-const OPENAI_MODEL = process.env.OPENAI_MODEL ?? "meta-llama/llama-3.3-70b-instruct:free";
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // undici's default fetch() client has its OWN internal headersTimeout
 // (5 minutes) independent of any AbortSignal passed to fetch — CPU-only
@@ -56,10 +48,11 @@ export async function generateStructured<T>(opts: StructuredOptions<T>): Promise
       ? `${prompt}\n\nYour previous response was invalid: ${lastError}\nReturn ONLY valid JSON matching the schema, with all required fields.`
       : prompt;
 
+    const provider = getSetting("LLM_PROVIDER");
     let raw: unknown;
     try {
-      if (PROVIDER === "claude") raw = await callClaude(system, fullPrompt, schema, schemaName);
-      else if (PROVIDER === "ollama") raw = await callOllama(system, fullPrompt, schema, schemaName);
+      if (provider === "claude") raw = await callClaude(system, fullPrompt, schema, schemaName);
+      else if (provider === "ollama") raw = await callOllama(system, fullPrompt, schema, schemaName);
       else raw = await callOpenAICompatible(system, fullPrompt, schema, schemaName);
     } catch (err) {
       // Connection errors (e.g. Ollama's model runner crashing under memory
@@ -67,7 +60,7 @@ export async function generateStructured<T>(opts: StructuredOptions<T>): Promise
       // rather than failing the whole brief. This is separate from the
       // validation retry below.
       lastError = String((err as Error)?.message ?? err);
-      logger.warn({ provider: PROVIDER, schemaName, attempt, error: lastError }, "LLM call failed, retrying");
+      logger.warn({ provider, schemaName, attempt, error: lastError }, "LLM call failed, retrying");
       if (attempt < maxRetries) await new Promise((r) => setTimeout(r, 3000 * (attempt + 1)));
       continue;
     }
@@ -76,7 +69,7 @@ export async function generateStructured<T>(opts: StructuredOptions<T>): Promise
     if (parsed.success) return parsed.data;
 
     lastError = parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
-    logger.warn({ provider: PROVIDER, schemaName, attempt, error: lastError }, "LLM output failed validation, retrying");
+    logger.warn({ provider, schemaName, attempt, error: lastError }, "LLM output failed validation, retrying");
   }
 
   throw new Error(`LLM failed to produce valid ${schemaName} after ${maxRetries + 1} attempts: ${lastError}`);
@@ -120,12 +113,14 @@ async function callOllama(system: string, prompt: string, schema: z.ZodType<unkn
 }
 
 async function callClaude(system: string, prompt: string, schema: z.ZodType<unknown>, schemaName: string) {
+  const model = getSetting("CLAUDE_MODEL");
+  const anthropic = new Anthropic({ apiKey: getSetting("ANTHROPIC_API_KEY") });
   const jsonSchema = z.toJSONSchema(schema);
   const start = Date.now();
-  logger.info({ provider: "claude", model: CLAUDE_MODEL, schemaName }, "LLM: requesting structured output");
+  logger.info({ provider: "claude", model, schemaName }, "LLM: requesting structured output");
 
   const res = await anthropic.messages.create({
-    model: CLAUDE_MODEL,
+    model,
     max_tokens: 8192,
     temperature: 0.4,
     system,
@@ -159,25 +154,28 @@ async function callOpenAICompatible(
   schema: z.ZodType<unknown>,
   schemaName: string,
 ) {
-  if (!OPENAI_API_KEY) {
-    throw new Error("OPENAI_API_KEY is not set — get a free key from your provider (e.g. openrouter.ai)");
+  const baseUrl = getSetting("OPENAI_BASE_URL");
+  const apiKey = getSetting("OPENAI_API_KEY");
+  const model = getSetting("OPENAI_MODEL");
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY is not set — configure it in Settings, or get a free key from your provider (e.g. openrouter.ai)");
   }
   const jsonSchema = z.toJSONSchema(schema);
   const start = Date.now();
-  logger.info({ provider: "openai", model: OPENAI_MODEL, schemaName }, "LLM: requesting structured output");
+  logger.info({ provider: "openai", model, schemaName }, "LLM: requesting structured output");
 
   const systemWithSchema =
     `${system}\n\nRespond with ONLY a single JSON object matching this exact JSON schema ` +
     `(no markdown, no code fences, no commentary):\n${JSON.stringify(jsonSchema)}`;
 
-  const res = await fetch(`${OPENAI_BASE_URL}/chat/completions`, {
+  const res = await fetch(`${baseUrl}/chat/completions`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      authorization: `Bearer ${OPENAI_API_KEY}`,
+      authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: OPENAI_MODEL,
+      model,
       temperature: 0.4,
       response_format: { type: "json_object" },
       messages: [

@@ -1,14 +1,17 @@
 import { ProxyAgent } from "undici";
 import { logger } from "../lib/logger.js";
+import { getSetting } from "../lib/settings.js";
 
-// Builds a proxy dispatcher from the TORCH_PROXY_* values in .env.
+// Builds a proxy dispatcher from the TORCH_PROXY_* settings (DB > env).
 // Every scraping request routes through this — search engines and competitor
 // sites see a Torch residential IP, not this machine.
 // `freshSession: true` swaps the session ID in the password for a random one,
 // which makes the proxy assign a brand-new exit IP for this request.
 export function getProxyAgent(opts: { freshSession?: boolean } = {}): ProxyAgent | undefined {
-  const { TORCH_PROXY_HOST, TORCH_PROXY_PORT, TORCH_PROXY_USERNAME, TORCH_PROXY_PASSWORD } =
-    process.env;
+  const TORCH_PROXY_HOST = getSetting("TORCH_PROXY_HOST");
+  const TORCH_PROXY_PORT = getSetting("TORCH_PROXY_PORT");
+  const TORCH_PROXY_USERNAME = getSetting("TORCH_PROXY_USERNAME");
+  const TORCH_PROXY_PASSWORD = getSetting("TORCH_PROXY_PASSWORD");
 
   if (!TORCH_PROXY_HOST || !TORCH_PROXY_PORT || !TORCH_PROXY_USERNAME || !TORCH_PROXY_PASSWORD) {
     logger.warn("Torch proxy not configured — scraping will use the direct connection");

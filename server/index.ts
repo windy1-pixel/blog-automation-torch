@@ -4,9 +4,11 @@ import type { Request, Response, NextFunction } from "express";
 import * as Sentry from "@sentry/node";
 import { logger } from "./lib/logger.js";
 import { db, initDb } from "./lib/db.js";
+import { loadSettings } from "./lib/settings.js";
 import { scrapeRouter } from "./routes/scrape.js";
 import { briefsRouter } from "./routes/briefs.js";
 import { articlesRouter } from "./routes/articles.js";
+import { settingsRouter } from "./routes/settings.js";
 
 const app = express();
 app.use(express.json());
@@ -37,6 +39,7 @@ app.get("/api/health", async (_req: Request, res: Response) => {
 app.use("/api", scrapeRouter);
 app.use("/api", briefsRouter);
 app.use("/api", articlesRouter);
+app.use("/api", settingsRouter);
 
 // Deliberate test error — visit this once Sentry is configured to confirm errors reach it.
 app.get("/api/debug-error", () => {
@@ -74,6 +77,7 @@ const port = Number(process.env.PORT ?? 3000);
 // live so the outage is visible rather than silently masked.
 try {
   await initDb();
+  await loadSettings();
 } catch (err) {
   logger.error({ err }, "database unavailable at startup — continuing without it");
 }
