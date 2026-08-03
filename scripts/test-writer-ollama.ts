@@ -6,12 +6,13 @@
 // the resulting draft + quality issues to a file so we can eyeball the prose.
 //
 // Run:  npx tsx scripts/test-writer-ollama.ts
+import "dotenv/config"; // load .env so provider/base-url/model/key come from it
 import { writeFileSync } from "node:fs";
 import { runWriterAgent } from "../server/agents/writer-agent.js";
 import type { ContentBrief } from "../server/agents/schemas.js";
 
-process.env.LLM_PROVIDER = "ollama";
-process.env.OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? "qwen2.5:7b-instruct";
+// Provider, base URL, model, and API key are read from .env (currently Groq).
+// Override on the command line if you want a one-off, e.g. LLM_PROVIDER=ollama.
 
 // A hand-written brief for the same keyword as the weak draft, so the output
 // is directly comparable. In production this comes from the brief agent.
@@ -37,14 +38,16 @@ const brief: ContentBrief = {
   targetWordCount: 1400,
 };
 
+const provider = process.env.LLM_PROVIDER ?? "openai";
+const model = provider === "ollama" ? process.env.OLLAMA_MODEL : process.env.OPENAI_MODEL;
 const started = Date.now();
-console.log(`[test] running writer on "mobile proxies" via Ollama (${process.env.OLLAMA_MODEL})…`);
+console.log(`[test] running writer on "mobile proxies" via ${provider}/${model}…`);
 
 const result = await runWriterAgent({ brief, keyword: "mobile proxies" });
 
 const mins = ((Date.now() - started) / 60000).toFixed(1);
 const out = [
-  `<!-- generated in ${mins} min via ollama/${process.env.OLLAMA_MODEL} -->`,
+  `<!-- generated in ${mins} min via ${provider}/${model} -->`,
   `<!-- word count: ${result.wordCount} -->`,
   `<!-- quality issues: ${result.qualityIssues.length} -->`,
   ...result.qualityIssues.map((q) => `<!-- [${q.severity}] ${q.rule}: ${q.detail} -->`),

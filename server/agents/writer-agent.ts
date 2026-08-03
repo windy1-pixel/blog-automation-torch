@@ -171,9 +171,11 @@ async function writeSection(args: {
         "The rules that matter most, in order:\n" +
         "1. ANSWER FIRST. Your opening sentence must directly answer the heading. Name the concrete " +
         "thing (proxy type, year, consequence) before any context. No warm-up, no analogy opener.\n" +
-        "2. NEVER fabricate. No invented statistics, benchmarks, or prices. No fake first-person " +
-        "experience ('I once tried…', 'in my testing…') unless it is given to you. State TorchProxies " +
-        "product facts ONLY if they appear in the product facts document; never attribute a " +
+        "2. NEVER fabricate. No invented statistics, benchmarks, or prices, including inside tables and " +
+        "cost examples: a made-up number in a table cell is still a fabrication. If a TorchProxies price " +
+        "is not set yet, write 'per-GB pricing at launch', never a figure like '$10/GB'. No fake " +
+        "first-person experience ('I once tried…', 'in my testing…') unless it is given to you. State " +
+        "TorchProxies product facts ONLY if they appear in the product facts document; never attribute a " +
         "competitor's spec to us.\n" +
         "3. NO SLOP. No forced analogies (subway/bus/library), no hedge stacking, no wrap-up questions, " +
         "no filler transitions. Every sentence must teach the reader something a novice could not guess.\n" +
@@ -190,7 +192,11 @@ async function writeSection(args: {
         `Write section ${index + 1} of ${plan.sections.length}.`,
         `Heading: ${section.heading}`,
         `This section must establish: ${section.purpose}`,
-        section.includeTable ? "Include a Markdown comparison table in this section." : "",
+        section.includeTable
+          ? "Include a Markdown comparison table ONLY if you can fill every cell with real values from " +
+            "the product facts (or a named source). If you would have to invent numbers to complete it, " +
+            "write a short prose comparison instead of a table."
+          : "",
         `Sections already written (do not repeat them): ${covered}`,
         `Aim for roughly ${Math.round(brief.targetWordCount / plan.sections.length)} words.`,
         feedback,

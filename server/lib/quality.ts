@@ -63,6 +63,18 @@ const BANNED_ADVERBS = [
 // Connector openers that are banned specifically at the start of a sentence.
 const BANNED_CONNECTORS = ["furthermore", "moreover", "additionally"];
 
+// Fabricated first-hand experience. The writer must not invent anecdotes or
+// testing it never did — trust comes from real evidence, not staged memories.
+// These match first-person, past-tense experience claims ("I once tried…",
+// "in my testing…", "we benchmarked this…"), which the brief almost never
+// actually supplies, so their appearance is a fabrication signal.
+const FABRICATED_EXPERIENCE = [
+  /\bi (?:once |personally |recently )?(?:tried|tested|benchmarked|ran|wasted|spent|debugged|scraped|deployed|measured)\b/i,
+  /\bin my (?:own )?(?:testing|experience|case|tests)\b/i,
+  /\bwhen i (?:tried|tested|ran|built|scraped)\b/i,
+  /\bwe (?:tested|benchmarked|ran|measured) (?:this|it|our|the)\b/i,
+];
+
 /**
  * Runs the mechanical style gate over a chunk of prose (a section or a whole
  * article). Returns every violation found; empty array means it passed.
@@ -96,6 +108,18 @@ export function checkStyle(text: string): QualityIssue[] {
     const re = new RegExp(`(^|[.!?]\\s+|\\n\\s*)${c}\\b`, "i");
     if (re.test(text)) {
       issues.push({ severity: "fail", rule: "banned-connector", detail: `"${c}" as a sentence opener` });
+    }
+  }
+
+  // Invented first-hand experience is a fail so the section is regenerated.
+  for (const re of FABRICATED_EXPERIENCE) {
+    if (re.test(text)) {
+      issues.push({
+        severity: "fail",
+        rule: "fabricated-experience",
+        detail: "invented first-hand experience; write from knowledge, not a staged anecdote",
+      });
+      break;
     }
   }
 
@@ -143,24 +167,46 @@ export function checkBurstiness(text: string): QualityIssue | null {
 }
 
 /**
- * Checks the six required Layer 3 humanisation signals across a FULL article.
- * These are heuristic: they can't prove a signal is good, only flag when one
- * appears to be missing so the writer (or a human) can look.
+ * Whole-article content signals, aligned with the WRITING METHOD.
+ *
+ * This replaces the old "Layer 3 humanisation" checker, which rewarded the very
+ * things the method now bans: staged personal failures, "I haven't tested"
+ * hedging, and forced analogies. That heuristic came from the n8n workflow's
+ * goal of fooling AI-detectors; the claude-blog method rejects it, because
+ * trust comes from real evidence and specifics, not manufactured quirks. So we
+ * no longer nag for those. Instead we warn only when the genuinely valuable
+ * signals are absent. All warnings, never blockers.
  */
 export function checkLayer3Signals(article: string): QualityIssue[] {
-  const lower = article.toLowerCase();
-  const signals: { name: string; patterns: RegExp[] }[] = [
-    { name: "personal failure/mistake", patterns: [/\bi (?:got|was|had|missed|broke|assumed|screwed|wasted|burned)\b/i, /\bmy mistake\b/i, /\bwe learned the hard way\b/i, /\bi lost\b/i] },
-    { name: '"you don\'t need this"', patterns: [/you (?:don't|do not) need (?:this|us)\b/i, /\bwe(?:'re| are) not the right\b/i, /\bskip (?:us|this)\b/i, /\bhonestly, you don't\b/i] },
-    { name: "expressed uncertainty", patterns: [/\bi haven't (?:personally )?tested\b/i, /\bi'm not sure\b/i, /\bmy guess\b/i, /\bi don't know\b/i, /\bunclear (?:to me|whether)\b/i] },
-    { name: "authority through detail", patterns: [/\b\d+(?:\.\d+)?\s*(?:%|gb|ms|gbps|m\+|k\+)\b/i, /\btrustpilot\b/i, /\$\d/] },
-    { name: "coverage gap noted", patterns: [/\bdeserves its own (?:guide|article|post)\b/i, /\bout(?:side)? (?:of )?scope\b/i, /\bnot covering\b/i, /\banother article\b/i] },
-    { name: "idiosyncratic analogy", patterns: [/\blike (?:a|an|the)\b/i, /\bthink of it as\b/i, /\bimagine\b/i] },
-  ];
+  const issues: QualityIssue[] = [];
 
-  return signals
-    .filter((s) => !s.patterns.some((p) => p.test(lower)))
-    .map((s) => ({ severity: "warn" as const, rule: "layer3-signal", detail: `missing: ${s.name}` }));
+  // Concrete, checkable specifics (numbers, prices, units) are what actually
+  // build authority. An entire article with zero figures is usually vague.
+  const hasSpecifics =
+    /\b\d+(?:\.\d+)?\s*(?:%|gb|ms|gbps|m\+|k\+|countries|ips?)\b/i.test(article) || /\$\d/.test(article);
+  if (!hasSpecifics) {
+    issues.push({
+      severity: "warn",
+      rule: "content-signal",
+      detail: "no concrete figures — add sourced specifics from product facts",
+    });
+  }
+
+  // Honest disqualification ("you don't need this / not the right fit") is a
+  // real trust signal and one of the brief's usual differentiation angles.
+  const hasBoundary =
+    /(you (?:don't|do not) need|not the right (?:fit|choice|proxy)|skip (?:us|this|mobile)|overkill|isn't worth|do not (?:need|use))/i.test(
+      article,
+    );
+  if (!hasBoundary) {
+    issues.push({
+      severity: "warn",
+      rule: "content-signal",
+      detail: "no honest 'when NOT to use this' boundary — add one",
+    });
+  }
+
+  return issues;
 }
 
 function sentences(text: string): string[] {

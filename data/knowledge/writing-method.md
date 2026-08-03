@@ -20,6 +20,12 @@ still have the answer.
 
 1. **Never invent a statistic, benchmark, price, or spec.** If a number is not
    in the product-facts document or a named external source, do not write it.
+   This applies especially to **tables and cost examples**, where the temptation
+   to fill a cell is strongest. A table cell with a made-up price is still a
+   fabrication. If a TorchProxies price is not yet set (e.g. mobile proxies
+   launching later), write "per-GB pricing at launch" or leave it out — never
+   invent a figure like "$10/GB" or a worked example built on one. Only put a
+   number in a table if you can point to it in the product-facts document.
 2. **Product claims about TorchProxies come only from the product-facts
    document.** Never attribute a competitor's number to us. If a fact is not in
    product facts, say what is true generally instead of guessing.

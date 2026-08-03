@@ -11,3 +11,6 @@ reddit-monitor/
 # Local Claude Code session state
 .claude/
 try-openserp.sh
+
+# generated test drafts
+scripts/out-*.md

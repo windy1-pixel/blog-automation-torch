@@ -83,10 +83,16 @@ export function knowledgeForWriter(): string {
  */
 export function knowledgeForSection(): string {
   const k = loadKnowledge();
+  // Kept deliberately lean. A full article makes one model call per section, so
+  // every extra character here is multiplied ~8x and, on token-per-minute-capped
+  // free APIs (e.g. Groq's 12k TPM), a fat per-call prompt causes 429s that blank
+  // whole sections. The two things a section actually needs are HOW to write
+  // (writing method, which already encodes voice + banned patterns) and WHAT it
+  // may claim (product facts). Brand-voice and the full style guide shape the
+  // PLAN, and the mechanical banned-phrase/em-dash rules are enforced in code by
+  // checkStyle, so they don't need to ride along on every section call.
   return section("WRITING METHOD (how this section must be written — obey this)", k.writingMethod)
-    + section("PRODUCT FACTS (the ONLY approved source for product claims)", k.productFacts)
-    + section("BRAND VOICE", k.brandVoice)
-    + section("STYLE GUIDE (mechanical rules, banned phrases, required signals)", k.styleGuide);
+    + section("PRODUCT FACTS (the ONLY approved source for product claims)", k.productFacts);
 }
 
 /** Strategy context for the brief/research stages. */

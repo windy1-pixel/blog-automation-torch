@@ -61,7 +61,16 @@ export async function generateStructured<T>(opts: StructuredOptions<T>): Promise
       // validation retry below.
       lastError = String((err as Error)?.message ?? err);
       logger.warn({ provider, schemaName, attempt, error: lastError }, "LLM call failed, retrying");
-      if (attempt < maxRetries) await new Promise((r) => setTimeout(r, 3000 * (attempt + 1)));
+      if (attempt < maxRetries) {
+        // Rate-limited providers (Groq's 12k tokens/minute free tier, etc.) tell
+        // us exactly how long to wait: "Please try again in 17.915s". Honour that
+        // hint when present — our old fixed 3s backoff was far too short and just
+        // burned all retries against the same closed window. Fall back to a
+        // growing backoff for non-429 errors.
+        const hinted = parseRetryAfterMs(lastError);
+        const wait = hinted ?? 3000 * (attempt + 1);
+        await new Promise((r) => setTimeout(r, wait));
+      }
       continue;
     }
 
@@ -73,6 +82,21 @@ export async function generateStructured<T>(opts: StructuredOptions<T>): Promise
   }
 
   throw new Error(`LLM failed to produce valid ${schemaName} after ${maxRetries + 1} attempts: ${lastError}`);
+}
+
+/**
+ * Pulls a wait time out of a rate-limit error message and returns it in ms.
+ * Handles the common "try again in 17.915s" / "in 250ms" phrasings that
+ * OpenAI-compatible providers return in their 429 bodies. Adds a small buffer
+ * so we retry just after the window reopens, not exactly on the boundary.
+ */
+function parseRetryAfterMs(message: string): number | undefined {
+  if (!/429|rate.?limit/i.test(message)) return undefined;
+  const secs = message.match(/try again in\s+([\d.]+)\s*s/i);
+  if (secs) return Math.ceil(parseFloat(secs[1]) * 1000) + 500;
+  const ms = message.match(/try again in\s+([\d.]+)\s*ms/i);
+  if (ms) return Math.ceil(parseFloat(ms[1])) + 500;
+  return undefined;
 }
 
 async function callOllama(system: string, prompt: string, schema: z.ZodType<unknown>, schemaName: string) {
