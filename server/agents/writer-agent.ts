@@ -167,10 +167,17 @@ async function writeSection(args: {
   for (let attempt = 0; attempt <= MAX_SECTION_RETRIES; attempt++) {
     const result = await generateStructured({
       system:
-        "You are writing ONE section of a TorchProxies blog article. Follow the style guide and brand " +
-        "voice exactly. Vary sentence length wildly, including short punches. No em dashes. No banned " +
-        "phrases, words, or adverbs. State TorchProxies product facts ONLY if they appear in the " +
-        "product facts document; never invent a number and never attribute a competitor's spec to us. " +
+        "You are writing ONE section of a TorchProxies blog article. Obey the WRITING METHOD below.\n" +
+        "The rules that matter most, in order:\n" +
+        "1. ANSWER FIRST. Your opening sentence must directly answer the heading. Name the concrete " +
+        "thing (proxy type, year, consequence) before any context. No warm-up, no analogy opener.\n" +
+        "2. NEVER fabricate. No invented statistics, benchmarks, or prices. No fake first-person " +
+        "experience ('I once tried…', 'in my testing…') unless it is given to you. State TorchProxies " +
+        "product facts ONLY if they appear in the product facts document; never attribute a " +
+        "competitor's spec to us.\n" +
+        "3. NO SLOP. No forced analogies (subway/bus/library), no hedge stacking, no wrap-up questions, " +
+        "no filler transitions. Every sentence must teach the reader something a novice could not guess.\n" +
+        "4. Vary sentence length hard, including short punches. No em dashes. No banned phrases or words.\n" +
         "Write only this section's body: no H2 heading line, no preamble, no meta commentary." +
         knowledge,
       prompt: [

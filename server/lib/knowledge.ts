@@ -18,6 +18,7 @@ const FILES = {
   productFacts: "features.md",
   brandVoice: "brand-voice.md",
   styleGuide: "style-guide.md",
+  writingMethod: "writing-method.md",
   writingExamples: "writing-examples.md",
   internalLinks: "internal-links-map.md",
   targetKeywords: "target-keywords.md",
@@ -64,7 +65,8 @@ export function loadKnowledge(force = false): Knowledge {
  */
 export function knowledgeForWriter(): string {
   const k = loadKnowledge();
-  return section("PRODUCT FACTS (the ONLY approved source for product claims)", k.productFacts)
+  return section("WRITING METHOD (how every section must be written — obey this)", k.writingMethod)
+    + section("PRODUCT FACTS (the ONLY approved source for product claims)", k.productFacts)
     + section("BRAND VOICE", k.brandVoice)
     + section("STYLE GUIDE (mechanical rules, banned phrases, required signals)", k.styleGuide)
     + section("WRITING EXAMPLES (match these)", k.writingExamples)
@@ -81,7 +83,8 @@ export function knowledgeForWriter(): string {
  */
 export function knowledgeForSection(): string {
   const k = loadKnowledge();
-  return section("PRODUCT FACTS (the ONLY approved source for product claims)", k.productFacts)
+  return section("WRITING METHOD (how this section must be written — obey this)", k.writingMethod)
+    + section("PRODUCT FACTS (the ONLY approved source for product claims)", k.productFacts)
     + section("BRAND VOICE", k.brandVoice)
     + section("STYLE GUIDE (mechanical rules, banned phrases, required signals)", k.styleGuide);
 }
