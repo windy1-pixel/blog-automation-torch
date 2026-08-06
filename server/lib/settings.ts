@@ -15,6 +15,11 @@ export const SETTINGS_SCHEMA = {
   OPENAI_BASE_URL: { secret: false, default: "https://openrouter.ai/api/v1", label: "OpenAI-compatible base URL" },
   OPENAI_API_KEY: { secret: true, default: "", label: "OpenAI-compatible API key (e.g. OpenRouter)" },
   OPENAI_MODEL: { secret: false, default: "nvidia/nemotron-3-super-120b-a12b:free", label: "Model id" },
+  EMBEDDING_MODEL: {
+    secret: false,
+    default: "nvidia/nemotron-3-embed-1b:free",
+    label: "Embedding model id (knowledge retrieval, OpenRouter)",
+  },
   CLAUDE_MODEL: { secret: false, default: "claude-sonnet-5", label: "Claude model (if provider=claude)" },
   ANTHROPIC_API_KEY: { secret: true, default: "", label: "Anthropic API key (if provider=claude)" },
   TORCH_PROXY_HOST: { secret: false, default: "", label: "Torch proxy host" },

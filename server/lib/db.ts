@@ -49,6 +49,24 @@ export async function initDb() {
       value      TEXT NOT NULL,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+
+    -- Embedded chunks of the "flavor" knowledge files (brand voice, style
+    -- guide, writing examples, internal-link map), keyed by a content hash so
+    -- a file is only re-embedded when it actually changes. Lives in Postgres
+    -- rather than a local file because the app container is rebuilt from
+    -- the Docker image on every Coolify deploy, so anything on local disk
+    -- would be lost and re-embedded on every single deploy otherwise.
+    CREATE TABLE IF NOT EXISTS knowledge_chunks (
+      id           SERIAL PRIMARY KEY,
+      file         TEXT NOT NULL,
+      chunk_index  INTEGER NOT NULL,
+      heading      TEXT,
+      content      TEXT NOT NULL,
+      embedding    JSONB NOT NULL,
+      content_hash TEXT NOT NULL,
+      updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+      UNIQUE (file, chunk_index)
+    );
   `);
 
   logger.info("database ready (Postgres)");

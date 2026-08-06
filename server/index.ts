@@ -5,6 +5,7 @@ import * as Sentry from "@sentry/node";
 import { logger } from "./lib/logger.js";
 import { db, initDb } from "./lib/db.js";
 import { loadSettings } from "./lib/settings.js";
+import { ensureKnowledgeIndex } from "./lib/knowledge-index.js";
 import { scrapeRouter } from "./routes/scrape.js";
 import { briefsRouter } from "./routes/briefs.js";
 import { articlesRouter } from "./routes/articles.js";
@@ -78,6 +79,11 @@ const port = Number(process.env.PORT ?? 3000);
 try {
   await initDb();
   await loadSettings();
+  // Best-effort: embeds the knowledge library's flavor files if they've
+  // changed since last indexed. Skips cleanly (per file, logged) if no
+  // OPENAI_API_KEY is configured yet — the writer still works without it,
+  // just without retrieved brand-voice/style-guide/example context.
+  await ensureKnowledgeIndex();
 } catch (err) {
   logger.error({ err }, "database unavailable at startup — continuing without it");
 }

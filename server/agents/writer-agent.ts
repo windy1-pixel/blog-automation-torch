@@ -1,5 +1,7 @@
 import { generateStructured } from "../lib/llm.js";
 import { knowledgeForWriter, knowledgeForSection } from "../lib/knowledge.js";
+import { embedTexts } from "../lib/embeddings.js";
+import { retrieveByEmbeddings } from "../lib/knowledge-index.js";
 import { checkStyle, checkLayer3Signals, sanitizeMechanical, type QualityIssue } from "../lib/quality.js";
 import { logger } from "../lib/logger.js";
 import {
@@ -74,6 +76,33 @@ export async function runWriterAgent(input: WriterInput): Promise<ArticleRunResu
     "writer: plan ready",
   );
 
+  // --- 1b. Retrieve relevant brand-voice/style/example context -------------
+  // ONE batched embedding call covers every section, the FAQ, and the
+  // conclusion at once (all their queries go in a single request). That one
+  // extra request buys back the brand-voice.md, style-guide.md,
+  // writing-examples.md, and internal-links-map.md richness that
+  // knowledgeForSection() deliberately excludes to keep per-section prompts
+  // small, without paying for it on every single one of the ~10 calls a full
+  // article makes. Retrieval is best-effort: if it fails (no embedding key
+  // configured yet, etc.) sections just get writing-method + product facts,
+  // same as before this feature existed.
+  const retrievalQueries = [
+    ...plan.sections.map((s) => `${s.heading}. ${s.purpose}`),
+    `FAQ for ${keyword}: ${plan.faq.join(" | ")}`,
+    `Conclusion for ${plan.h1}`,
+  ];
+  let retrieved: string[][] = retrievalQueries.map(() => []);
+  try {
+    const queryEmbeddings = await embedTexts(retrievalQueries);
+    retrieved = await retrieveByEmbeddings(queryEmbeddings, 3);
+    logger.info({ keyword, queries: retrievalQueries.length }, "writer: retrieved knowledge context");
+  } catch (err) {
+    logger.warn({ keyword, err }, "writer: knowledge retrieval failed, continuing without it");
+  }
+  const sectionContext = retrieved.slice(0, plan.sections.length);
+  const faqContext = retrieved[plan.sections.length] ?? [];
+  const conclusionContext = retrieved[plan.sections.length + 1] ?? [];
+
   // --- 2. Write each section on its own -------------------------------------
   // Free hosted models hang unpredictably (observed: some calls return in 20s,
   // others never return). A single bad section must not destroy a run that has
@@ -85,7 +114,16 @@ export async function runWriterAgent(input: WriterInput): Promise<ArticleRunResu
 
   for (const [i, section] of plan.sections.entries()) {
     try {
-      const md = await writeSection({ plan, section, index: i, brief, keyword, knowledge, written });
+      const md = await writeSection({
+        plan,
+        section,
+        index: i,
+        brief,
+        keyword,
+        knowledge,
+        retrievedContext: sectionContext[i] ?? [],
+        written,
+      });
       written.push({ heading: section.heading, markdown: md });
       logger.info(
         { keyword, section: i + 1, of: plan.sections.length, words: md.split(/\s+/).length },
@@ -104,16 +142,18 @@ export async function runWriterAgent(input: WriterInput): Promise<ArticleRunResu
 
   // --- 3. FAQ and conclusion ------------------------------------------------
   // Same tolerance: these are worth having but not worth losing the body over.
-  const faqBlock = await writeFaq({ plan, keyword, knowledge }).catch((err) => {
+  const faqBlock = await writeFaq({ plan, keyword, knowledge, retrievedContext: faqContext }).catch((err) => {
     logger.error({ keyword, err }, "writer: FAQ failed, continuing");
     failedSections.push("FAQ");
     return "> **[FAQ not generated]** Regenerate the draft to produce it.";
   });
-  const conclusion = await writeConclusion({ plan, keyword, knowledge, written }).catch((err) => {
-    logger.error({ keyword, err }, "writer: conclusion failed, continuing");
-    failedSections.push("Conclusion");
-    return "> **[Conclusion not generated]** Regenerate the draft to produce it.";
-  });
+  const conclusion = await writeConclusion({ plan, keyword, knowledge, retrievedContext: conclusionContext, written }).catch(
+    (err) => {
+      logger.error({ keyword, err }, "writer: conclusion failed, continuing");
+      failedSections.push("Conclusion");
+      return "> **[Conclusion not generated]** Regenerate the draft to produce it.";
+    },
+  );
 
   // --- 4. Assemble ----------------------------------------------------------
   const markdown = sanitizeMechanical(assemble(plan, written, faqBlock, conclusion));
@@ -154,9 +194,11 @@ async function writeSection(args: {
   brief: ContentBrief;
   keyword: string;
   knowledge: string;
+  retrievedContext: string[];
   written: { heading: string; markdown: string }[];
 }): Promise<string> {
-  const { plan, section, index, brief, keyword, knowledge, written } = args;
+  const { plan, section, index, brief, keyword, knowledge, retrievedContext, written } = args;
+  const knowledgeWithContext = knowledge + retrievedContextBlock(retrievedContext);
 
   // Only pass the headings already written, not their full text: the model
   // needs to know what's been covered to avoid repeating itself, but sending
@@ -181,7 +223,7 @@ async function writeSection(args: {
         "no filler transitions. Every sentence must teach the reader something a novice could not guess.\n" +
         "4. Vary sentence length hard, including short punches. No em dashes. No banned phrases or words.\n" +
         "Write only this section's body: no H2 heading line, no preamble, no meta commentary." +
-        knowledge,
+        knowledgeWithContext,
       prompt: [
         `Article H1: ${plan.h1}`,
         `Article subtitle: ${plan.subtitle}`,
@@ -224,13 +266,19 @@ async function writeSection(args: {
   return "";
 }
 
-async function writeFaq(args: { plan: ArticlePlan; keyword: string; knowledge: string }): Promise<string> {
-  const { plan, keyword, knowledge } = args;
+async function writeFaq(args: {
+  plan: ArticlePlan;
+  keyword: string;
+  knowledge: string;
+  retrievedContext: string[];
+}): Promise<string> {
+  const { plan, keyword, knowledge, retrievedContext } = args;
   const result = await generateStructured({
     system:
       "Write the FAQ section of a TorchProxies article. Each answer is 1-3 sentences, direct, no filler. " +
       "Product facts only from the product facts document. No em dashes, no banned phrases." +
-      knowledge,
+      knowledge +
+      retrievedContextBlock(retrievedContext),
     prompt: [
       `Article: ${plan.h1}`,
       `Primary keyword: "${keyword}"`,
@@ -247,14 +295,16 @@ async function writeConclusion(args: {
   plan: ArticlePlan;
   keyword: string;
   knowledge: string;
+  retrievedContext: string[];
   written: { heading: string; markdown: string }[];
 }): Promise<string> {
-  const { plan, keyword, knowledge, written } = args;
+  const { plan, keyword, knowledge, retrievedContext, written } = args;
   const result = await generateStructured({
     system:
       "Write the conclusion of a TorchProxies article. It must answer the title question directly and " +
       "end decisively. No summary recap of what the article covered. No 'In conclusion'. No em dashes." +
-      knowledge,
+      knowledge +
+      retrievedContextBlock(retrievedContext),
     prompt: [
       `Article: ${plan.h1}`,
       `Primary keyword: "${keyword}"`,
@@ -323,6 +373,15 @@ function dedupeSections(sections: ArticlePlan["sections"]): ArticlePlan["section
     if (kept.length === 8) break;
   }
   return kept;
+}
+
+/** Formats retrieved knowledge chunks as a labelled prompt block, or "" if there are none. */
+function retrievedContextBlock(chunks: string[]): string {
+  if (chunks.length === 0) return "";
+  return (
+    "\n\n===== RELEVANT BRAND VOICE / STYLE / EXAMPLE NOTES (retrieved for this section) =====\n" +
+    chunks.join("\n\n")
+  );
 }
 
 function slugify(title: string): string {

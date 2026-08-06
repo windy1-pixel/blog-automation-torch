@@ -3,6 +3,7 @@ import { Agent, fetch } from "undici";
 import Anthropic from "@anthropic-ai/sdk";
 import { logger } from "./logger.js";
 import { getSetting } from "./settings.js";
+import { paceRequest, minIntervalFor } from "./rate-limit.js";
 
 // Single entry point every agent uses to talk to an LLM. Which model actually
 // answers is controlled by the LLM_PROVIDER setting (DB > env > default):
@@ -61,6 +62,17 @@ export async function generateStructured<T>(opts: StructuredOptions<T>): Promise
       // validation retry below.
       lastError = String((err as Error)?.message ?? err);
       logger.warn({ provider, schemaName, attempt, error: lastError }, "LLM call failed, retrying");
+
+      // OpenRouter's free-model DAILY quota (distinct from its per-minute
+      // limit) can't be waited out within the same run: it resets tomorrow,
+      // or requires adding credits. Retrying just burns two more attempts
+      // against a door that isn't going to open. Fail immediately so the
+      // caller (writer-agent) marks this section as a visible gap right away
+      // instead of after ~3 pointless retries.
+      if (/free-models-per-day/i.test(lastError)) {
+        throw new Error(lastError);
+      }
+
       if (attempt < maxRetries) {
         // Rate-limited providers (Groq's 12k tokens/minute free tier, etc.) tell
         // us exactly how long to wait: "Please try again in 17.915s". Honour that
@@ -191,6 +203,12 @@ async function callOpenAICompatible(
   const systemWithSchema =
     `${system}\n\nRespond with ONLY a single JSON object matching this exact JSON schema ` +
     `(no markdown, no code fences, no commentary):\n${JSON.stringify(jsonSchema)}`;
+
+  // Proactively space calls to request-count-limited free tiers (OpenRouter:
+  // 20/min) instead of firing everything back to back and reacting to 429s.
+  // A whole article's ~10-12 calls comfortably clear the per-minute ceiling
+  // this way, with zero retries burned on avoidable rate limits.
+  await paceRequest(baseUrl, minIntervalFor(baseUrl));
 
   const res = await fetch(`${baseUrl}/chat/completions`, {
     method: "POST",
