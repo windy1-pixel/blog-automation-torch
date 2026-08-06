@@ -87,7 +87,7 @@ export async function runWriterAgent(input: WriterInput): Promise<ArticleRunResu
   // configured yet, etc.) sections just get writing-method + product facts,
   // same as before this feature existed.
   const retrievalQueries = [
-    ...plan.sections.map((s) => `${s.heading}. ${s.purpose}`),
+    ...plan.sections.map((s) => `${s.heading}. ${s.purpose || s.heading}`),
     `FAQ for ${keyword}: ${plan.faq.join(" | ")}`,
     `Conclusion for ${plan.h1}`,
   ];
@@ -233,7 +233,9 @@ async function writeSection(args: {
         "",
         `Write section ${index + 1} of ${plan.sections.length}.`,
         `Heading: ${section.heading}`,
-        `This section must establish: ${section.purpose}`,
+        // section.purpose is optional (the model occasionally omits it) — the heading
+        // itself is still a usable, if less specific, instruction when that happens.
+        `This section must establish: ${section.purpose || section.heading}`,
         section.includeTable
           ? "Include a Markdown comparison table ONLY if you can fill every cell with real values from " +
             "the product facts (or a named source). If you would have to invent numbers to complete it, " +

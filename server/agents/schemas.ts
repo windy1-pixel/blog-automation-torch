@@ -79,8 +79,15 @@ export const ArticlePlanSchema = z.object({
     .array(
       z.object({
         heading: z.string().describe("H2 heading"),
-        purpose: z.string().describe("What this section must establish"),
-        includeTable: z.boolean().describe("Whether this section should contain a comparison table"),
+        // Optional, not required: free-tier models occasionally drop this field on one
+        // section out of several, especially with a long outline. Failing the whole plan
+        // over one missing advisory field wastes retries against the daily request
+        // budget for no gain, so writer-agent falls back to the heading when it's absent.
+        purpose: z.string().optional().describe("What this section must establish. Always include this."),
+        includeTable: z
+          .boolean()
+          .optional()
+          .describe("Whether this section should contain a comparison table"),
       }),
     )
     .describe("5-8 H2 sections in order"),
