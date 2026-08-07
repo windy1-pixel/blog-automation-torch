@@ -34,6 +34,14 @@ export interface WriterInput {
   keyword: string;
 }
 
+/** Retrieved knowledge for one section/FAQ/conclusion call, kept in two separate
+ * pools so internal-link candidates always get a guaranteed slot rather than
+ * competing with voice/style chunks for the same top-k and regularly losing. */
+interface RetrievedContext {
+  voice: string[];
+  links: string[];
+}
+
 export async function runWriterAgent(input: WriterInput): Promise<ArticleRunResult> {
   const { brief, keyword } = input;
   const planKnowledge = knowledgeForWriter();
@@ -76,32 +84,54 @@ export async function runWriterAgent(input: WriterInput): Promise<ArticleRunResu
     "writer: plan ready",
   );
 
-  // --- 1b. Retrieve relevant brand-voice/style/example context -------------
+  // --- 1b. Retrieve relevant brand-voice/style/example context, AND -------
+  //         internal-link candidates, separately -----------------------------
   // ONE batched embedding call covers every section, the FAQ, and the
   // conclusion at once (all their queries go in a single request). That one
   // extra request buys back the brand-voice.md, style-guide.md,
   // writing-examples.md, and internal-links-map.md richness that
   // knowledgeForSection() deliberately excludes to keep per-section prompts
   // small, without paying for it on every single one of the ~10 calls a full
-  // article makes. Retrieval is best-effort: if it fails (no embedding key
-  // configured yet, etc.) sections just get writing-method + product facts,
-  // same as before this feature existed.
+  // article makes.
+  //
+  // Link candidates get their OWN retrieval call, scoped to internal-links-map.md
+  // only. Without that, link data just competed for the same top-3 slots
+  // against brand-voice/style-guide/writing-examples chunks and regularly lost
+  // every ranking — a real article generated this way shipped with zero
+  // internal links, because the retrieved context was never guaranteed to
+  // contain any, and even when it did, nothing told the model to act on it
+  // (see the explicit link-usage instruction added to writeSection below).
+  // Both retrieval calls reuse the SAME query embeddings, so this costs zero
+  // extra API requests: retrieval itself is pure in-process cosine similarity.
   const retrievalQueries = [
     ...plan.sections.map((s) => `${s.heading}. ${s.purpose || s.heading}`),
     `FAQ for ${keyword}: ${plan.faq.join(" | ")}`,
     `Conclusion for ${plan.h1}`,
   ];
-  let retrieved: string[][] = retrievalQueries.map(() => []);
+  let voiceRetrieved: string[][] = retrievalQueries.map(() => []);
+  let linkRetrieved: string[][] = retrievalQueries.map(() => []);
   try {
     const queryEmbeddings = await embedTexts(retrievalQueries);
-    retrieved = await retrieveByEmbeddings(queryEmbeddings, 3);
+    [voiceRetrieved, linkRetrieved] = await Promise.all([
+      retrieveByEmbeddings(queryEmbeddings, 2, ["brand-voice.md", "style-guide.md", "writing-examples.md"]),
+      retrieveByEmbeddings(queryEmbeddings, 2, ["internal-links-map.md"]),
+    ]);
     logger.info({ keyword, queries: retrievalQueries.length }, "writer: retrieved knowledge context");
   } catch (err) {
     logger.warn({ keyword, err }, "writer: knowledge retrieval failed, continuing without it");
   }
-  const sectionContext = retrieved.slice(0, plan.sections.length);
-  const faqContext = retrieved[plan.sections.length] ?? [];
-  const conclusionContext = retrieved[plan.sections.length + 1] ?? [];
+  const sectionContext = plan.sections.map((_, i) => ({
+    voice: voiceRetrieved[i] ?? [],
+    links: linkRetrieved[i] ?? [],
+  }));
+  const faqContext = {
+    voice: voiceRetrieved[plan.sections.length] ?? [],
+    links: linkRetrieved[plan.sections.length] ?? [],
+  };
+  const conclusionContext = {
+    voice: voiceRetrieved[plan.sections.length + 1] ?? [],
+    links: linkRetrieved[plan.sections.length + 1] ?? [],
+  };
 
   // --- 2. Write each section on its own -------------------------------------
   // Free hosted models hang unpredictably (observed: some calls return in 20s,
@@ -121,7 +151,7 @@ export async function runWriterAgent(input: WriterInput): Promise<ArticleRunResu
         brief,
         keyword,
         knowledge,
-        retrievedContext: sectionContext[i] ?? [],
+        retrievedContext: sectionContext[i] ?? { voice: [], links: [] },
         written,
       });
       written.push({ heading: section.heading, markdown: md });
@@ -194,11 +224,18 @@ async function writeSection(args: {
   brief: ContentBrief;
   keyword: string;
   knowledge: string;
-  retrievedContext: string[];
+  retrievedContext: RetrievedContext;
   written: { heading: string; markdown: string }[];
 }): Promise<string> {
   const { plan, section, index, brief, keyword, knowledge, retrievedContext, written } = args;
-  const knowledgeWithContext = knowledge + retrievedContextBlock(retrievedContext);
+  // Voice/style notes stay in the system prompt (general guidance). Link
+  // candidates are deliberately NOT here: a first version put them in the
+  // system prompt alongside a "rule 5" instruction and got zero links across
+  // every test, including topics with an unambiguous product-page match. The
+  // instruction and the data it referred to were ~10KB apart in a long system
+  // prompt, which this free-tier model reliably ignored. Moving both together
+  // into the user prompt, right next to the section spec, fixed it in testing.
+  const knowledgeWithContext = knowledge + voiceContextBlock(retrievedContext.voice);
 
   // Only pass the headings already written, not their full text: the model
   // needs to know what's been covered to avoid repeating itself, but sending
@@ -222,6 +259,8 @@ async function writeSection(args: {
         "3. NO SLOP. No forced analogies (subway/bus/library), no hedge stacking, no wrap-up questions, " +
         "no filler transitions. Every sentence must teach the reader something a novice could not guess.\n" +
         "4. Vary sentence length hard, including short punches. No em dashes. No banned phrases or words.\n" +
+        "5. INTERNAL LINKS. See the INTERNAL LINK CANDIDATES near the end of this message for the exact " +
+        "instruction and URLs to use.\n" +
         "Write only this section's body: no H2 heading line, no preamble, no meta commentary." +
         knowledgeWithContext,
       prompt: [
@@ -242,6 +281,7 @@ async function writeSection(args: {
             "write a short prose comparison instead of a table."
           : "",
         `Sections already written (do not repeat them): ${covered}`,
+        linkCandidatesBlock(retrievedContext.links),
         `Aim for roughly ${Math.round(brief.targetWordCount / plan.sections.length)} words.`,
         feedback,
       ]
@@ -272,15 +312,17 @@ async function writeFaq(args: {
   plan: ArticlePlan;
   keyword: string;
   knowledge: string;
-  retrievedContext: string[];
+  retrievedContext: RetrievedContext;
 }): Promise<string> {
   const { plan, keyword, knowledge, retrievedContext } = args;
+  // FAQ answers are 1-3 sentences each; link candidates aren't used here (they
+  // read as forced in an FAQ), so only the voice/style notes are passed along.
   const result = await generateStructured({
     system:
       "Write the FAQ section of a TorchProxies article. Each answer is 1-3 sentences, direct, no filler. " +
       "Product facts only from the product facts document. No em dashes, no banned phrases." +
       knowledge +
-      retrievedContextBlock(retrievedContext),
+      voiceContextBlock(retrievedContext.voice),
     prompt: [
       `Article: ${plan.h1}`,
       `Primary keyword: "${keyword}"`,
@@ -297,22 +339,28 @@ async function writeConclusion(args: {
   plan: ArticlePlan;
   keyword: string;
   knowledge: string;
-  retrievedContext: string[];
+  retrievedContext: RetrievedContext;
   written: { heading: string; markdown: string }[];
 }): Promise<string> {
   const { plan, keyword, knowledge, retrievedContext, written } = args;
+  // Same fix as writeSection: link candidates + their instruction live in the
+  // user prompt, right next to the actual generation instructions, not buried
+  // in a long system prompt where this model reliably ignored them.
   const result = await generateStructured({
     system:
       "Write the conclusion of a TorchProxies article. It must answer the title question directly and " +
       "end decisively. No summary recap of what the article covered. No 'In conclusion'. No em dashes." +
       knowledge +
-      retrievedContextBlock(retrievedContext),
+      voiceContextBlock(retrievedContext.voice),
     prompt: [
       `Article: ${plan.h1}`,
       `Primary keyword: "${keyword}"`,
       `Sections covered: ${written.map((w) => w.heading).join("; ")}`,
       "End on the actual final point, not a recap. Include the closing CTA naturally.",
-    ].join("\n"),
+      linkCandidatesBlock(retrievedContext.links, { max: 1 }),
+    ]
+      .filter(Boolean)
+      .join("\n"),
     schema: ArticleSectionSchema,
     schemaName: "ArticleSection",
   });
@@ -377,13 +425,32 @@ function dedupeSections(sections: ArticlePlan["sections"]): ArticlePlan["section
   return kept;
 }
 
-/** Formats retrieved knowledge chunks as a labelled prompt block, or "" if there are none. */
-function retrievedContextBlock(chunks: string[]): string {
-  if (chunks.length === 0) return "";
-  return (
-    "\n\n===== RELEVANT BRAND VOICE / STYLE / EXAMPLE NOTES (retrieved for this section) =====\n" +
-    chunks.join("\n\n")
-  );
+/** Formats retrieved voice/style notes as a system-prompt block, or "" if there are none. */
+function voiceContextBlock(voice: string[]): string {
+  if (voice.length === 0) return "";
+  return "\n\n===== RELEVANT BRAND VOICE / STYLE / EXAMPLE NOTES (retrieved for this section) =====\n" + voice.join("\n\n");
+}
+
+/**
+ * Formats internal-link candidates as a USER-prompt block (not system): this
+ * needs to sit right next to the "write this section now" instructions, not
+ * get buried under ~10KB of knowledge text in the system prompt, where
+ * testing showed this model reliably ignored it even with unambiguous
+ * product-page matches available. Includes a concrete example of the exact
+ * syntax expected, since a format example moved compliance far more than the
+ * prose instruction alone did.
+ */
+function linkCandidatesBlock(links: string[], opts: { max?: number } = {}): string {
+  if (links.length === 0) return "";
+  const max = opts.max ?? 2;
+  return [
+    `INTERNAL LINK CANDIDATES: if ${max === 1 ? "one of these is" : "one or two of these are"} genuinely relevant `
+      + `to what you're about to write, include ${max === 1 ? "it" : "them"} as a Markdown link using the EXACT `
+      + `URL given, never an invented one. Example: "...a stable IP matters for checkout automation, which is `
+      + `why [ISP proxies](https://torchproxies.com/isp-proxies/) hold up better than rotating pools here." Skip `
+      + `this entirely if none of the candidates below actually fit.`,
+    ...links,
+  ].join("\n\n");
 }
 
 function slugify(title: string): string {

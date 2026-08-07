@@ -206,6 +206,20 @@ export function checkLayer3Signals(article: string): QualityIssue[] {
     });
   }
 
+  // Internal links are retrieved per-section from internal-links-map.md and
+  // the writer is instructed to use them where relevant, but retrieval or
+  // the model can both come up empty. A whole article with zero internal
+  // links is a real defect (it was shipping silently before this check
+  // existed), so surface it rather than let a link-less draft look finished.
+  const internalLinkCount = (article.match(/\[[^\]]+\]\(https?:\/\/[^)]+\)/g) ?? []).length;
+  if (internalLinkCount === 0) {
+    issues.push({
+      severity: "warn",
+      rule: "content-signal",
+      detail: "no internal links found in the article — add 3-10 per the internal-links-map",
+    });
+  }
+
   return issues;
 }
 

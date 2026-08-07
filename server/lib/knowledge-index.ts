@@ -149,9 +149,21 @@ async function loadIndex(): Promise<IndexedChunk[]> {
  * API calls, so this scales to any number of queries for free once the index
  * is loaded. Returns an empty result set per query (never throws) if the
  * index has no chunks, e.g. no API key has ever been configured.
+ *
+ * `files`, if given, restricts the search to chunks from those files only.
+ * This exists so a caller can guarantee a slot for a specific file (e.g.
+ * internal-links-map.md) instead of it competing for the same top-k against
+ * brand-voice/style-guide/writing-examples chunks — without that, link
+ * candidates could easily lose every ranking to more topically-similar style
+ * notes and never reach the section prompt at all.
  */
-export async function retrieveByEmbeddings(queryEmbeddings: number[][], k = 3): Promise<string[][]> {
-  const chunks = await loadIndex();
+export async function retrieveByEmbeddings(
+  queryEmbeddings: number[][],
+  k = 3,
+  files?: string[],
+): Promise<string[][]> {
+  const all = await loadIndex();
+  const chunks = files ? all.filter((c) => files.includes(c.file)) : all;
   if (chunks.length === 0) return queryEmbeddings.map(() => []);
 
   return queryEmbeddings.map((qEmb) => {
