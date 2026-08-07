@@ -63,3 +63,75 @@ The entire June social series (Meta/Instagram detection, TikTok ByteDance, Linke
 ## Anchor text rules
 
 Descriptive, keyword-bearing, natural in the sentence. Not "click here", not the bare URL, not the same exact anchor sitewide for one target (vary it). External links go to named sources only: Proxyway Research, Cloudflare Radar, Mordor Intelligence.
+
+---
+
+## Live sitemap cross-check (6 August 2026)
+
+Pulled directly from `sitemap_index.xml` and its 5 children (post, page, category,
+local, mega-menu). Confirms the July 23 audit is still accurate and adds what it
+didn't cover. Nothing above this line was changed.
+
+**No new posts since July 23.** The newest post in `post-sitemap.xml` is still
+17 June (YouTube Channel Management) — the whole June social series listed under
+"Orphans" is still the frontier and still needs those inbound links.
+
+### Money page slugs (fills the gap in the table above — it named these but never linked them)
+
+| Page | Slug |
+|---|---|
+| Plan X product page | `/plan-x-residential/` |
+| Premium Residential page | `/premium-residential-proxies/` |
+| Standard Residential page | `/standard-residential-proxies/` |
+| ISP Proxies page | `/isp-proxies/` |
+| Sneaker Proxies | `/sneaker-proxies/` |
+| Ticketmaster Proxies | `/ticketmaster-proxies/` |
+| Proxy API | `/proxy-api/` |
+| Ad Verification (use case) | `/ad-verification/` |
+| Web Scraping (use case) | `/web-scraping/` |
+| SEO Monitoring (use case) | `/seo-monitoring/` |
+| Price Monitoring (use case) | `/price-monitoring/` |
+| Blog index | `/blogs/` |
+| **Mobile Proxies page** | **Not live yet.** Not in the sitemap despite the "from Aug 2026" plan above — still using the mobile-launch messaging as a placeholder until this page exists. Do not link it. |
+
+### ⚠️ Discrepancy to resolve: ISP country count
+
+`features.md` (the only approved source for product claims) states **8 ISP
+countries**: USA, UK, Canada, Germany, Australia, Hong Kong, Korea, Japan. The
+live sitemap has **42 `-isp/` country pages** and **50 residential country
+pages**. Either `features.md` is badly out of date (meaning the writer is
+undercounting real coverage in every article), or most of these pages are
+legacy/unlaunched inventory that shouldn't be claimed or linked. I haven't
+resolved this — someone who knows the real current country coverage needs to
+say which. Until then, the writer should keep citing only the 8 confirmed
+countries from `features.md`, not the full sitemap list below.
+
+### Full geo page inventory (not covered in the original map)
+
+Residential (50) and ISP (42) country pages exist for most major markets.
+Pattern: `/{country}/` (residential) and `/{country}-isp/` (ISP). Examples:
+`/germany/` + `/germany-isp/`, `/united-states/` + `/united-states-isp/`,
+`/hong-kong/` (no ISP variant found), `/japan/` (no ISP variant found).
+Full list available on request — omitted here since the count above is
+unresolved and I don't want to hand the writer 90 geo pages to link against
+before someone confirms which are real.
+
+### New technical findings (sitemap hygiene, not strategy)
+
+- **`/home-v1/` and `/home-2/` are both in `page-sitemap.xml` but return 404.**
+  Google will fetch these from the sitemap and hit dead links — separate from
+  the internal-linking problem, but worth a ticket to remove them from the
+  sitemap.
+- **New duplicate-page pattern found, same shape as the known `-old`/`-2`
+  blog-post duplicates**: 8 countries each have a second, identical-title `-2`
+  page live in addition to the normal one — confirmed by title match:
+  `/germany/` = `/germany-2/`, `/united-states/` = `/united-states-2/`, and
+  likely also united-kingdom, netherlands, canada, italy, france, australia
+  (same `-2` pattern, not individually re-verified). **Add these to the
+  do-not-link list** until one of each pair is retired: never link to the `-2`
+  geo variant, only the plain slug.
+- **Still live, not yet cleaned up** (confirms the July 23 "Do-not-link list"
+  is still accurate, nothing resolved yet): `/test/`, `/countries-old/`,
+  `/isp-proxies-old/`, `/premium-residential-proxies-old/`, and all three
+  known duplicate post pairs (datacenter-vs-residential-proxies,
+  virtual-machines-vs-antidetect-browsers, do-you-need-hybrid-proxies...-2).
