@@ -28,6 +28,9 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(input),
     }),
+
+  retryBrief: (id: number) =>
+    jsonFetch<{ id: number; status: string }>(`/api/briefs/${id}/retry`, { method: "POST" }),
   listArticles: () => jsonFetch<ArticleSummary[]>("/api/articles"),
 
   getArticle: (id: number) => jsonFetch<Article>(`/api/articles/${id}`),

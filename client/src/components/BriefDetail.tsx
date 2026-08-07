@@ -10,6 +10,12 @@ const POLL_MS = 4000;
 export function BriefDetail({ id, onChanged }: { id: number; onChanged: () => void }) {
   const [brief, setBrief] = useState<Brief | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Bumped after a successful retry to re-trigger the polling effect below
+  // without duplicating its logic — same keyword, same brief row, just start
+  // watching it again from "pending".
+  const [retryTick, setRetryTick] = useState(0);
+  const [retrying, setRetrying] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -38,7 +44,21 @@ export function BriefDetail({ id, onChanged }: { id: number; onChanged: () => vo
       active = false;
       clearTimeout(timer);
     };
-  }, [id, onChanged]);
+  }, [id, onChanged, retryTick]);
+
+  async function retry() {
+    setRetrying(true);
+    setRetryError(null);
+    try {
+      await api.retryBrief(id);
+      setRetryTick((t) => t + 1); // re-enters the effect above from "pending"
+      onChanged();
+    } catch (err) {
+      setRetryError(err instanceof Error ? err.message : "Failed to retry");
+    } finally {
+      setRetrying(false);
+    }
+  }
 
   if (error) return <p className="error">{error}</p>;
   if (!brief) return <p className="muted">Loading…</p>;
@@ -61,6 +81,12 @@ export function BriefDetail({ id, onChanged }: { id: number; onChanged: () => vo
         <h2>{brief.keyword}</h2>
         <p className="error">Brief generation failed:</p>
         <pre className="error-detail">{brief.error}</pre>
+        {retryError && <p className="error">{retryError}</p>}
+        <div className="actions">
+          <button type="button" onClick={retry} disabled={retrying}>
+            {retrying ? "Retrying…" : "Try again"}
+          </button>
+        </div>
       </div>
     );
   }

@@ -50,6 +50,38 @@ briefsRouter.get("/briefs", async (_req: Request, res: Response) => {
   res.json(result.rows);
 });
 
+// Retries a failed brief in place: same row, same keyword/audience/notes, no
+// retyping and no duplicate rows cluttering the list. Only failed briefs can
+// be retried — anything else already has (or is generating) real content.
+briefsRouter.post("/briefs/:id/retry", async (req: Request, res: Response) => {
+  const existing = await db.query<{ status: string; keyword: string; audience: string | null; notes: string | null }>(
+    "SELECT status, keyword, audience, notes FROM briefs WHERE id = $1",
+    [req.params.id],
+  );
+  if (existing.rows.length === 0) {
+    res.status(404).json({ error: "brief not found" });
+    return;
+  }
+  const current = existing.rows[0];
+  if (current.status !== "failed") {
+    res.status(409).json({ error: `cannot retry a brief with status "${current.status}"` });
+    return;
+  }
+
+  const id = Number(req.params.id);
+  await db.query("UPDATE briefs SET status = 'pending', error = NULL, updated_at = now() WHERE id = $1", [id]);
+
+  processBrief(id, {
+    keyword: current.keyword,
+    audience: current.audience ?? undefined,
+    notes: current.notes ?? undefined,
+  }).catch((err) => {
+    logger.error({ err, id }, "brief retry failed outside its own error handling");
+  });
+
+  res.status(202).json({ id, status: "pending" });
+});
+
 // Save human edits to a brief and/or approve it for writing. The review step:
 // a person can adjust the generated brief (outline, must-cover topics, etc.)
 // before it becomes the contract the writer works from. Only "ready" or
