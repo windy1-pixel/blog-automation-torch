@@ -77,7 +77,37 @@ export async function fetchSerp(keyword: string, count = 10): Promise<SerpResult
     );
   }
 
+  if (looksOffTopic(results)) {
+    const sample = results.slice(0, 4).map((r) => r.title || new URL(r.url).hostname).join("; ");
+    throw new Error(
+      `Bing returned results with no proxy/scraping-industry relevance for "${keyword}" (top results: ${sample}). ` +
+        "This happens when a keyword collides with an unrelated dominant meaning on Bing's non-JS endpoint " +
+        "(e.g. \"mobile proxies vs residential\" pulled mobile-phone carrier sites and a Wikipedia city page, " +
+        "not proxy content, on every attempt — retrying gets identical results, so it will not self-resolve). " +
+        "Rephrase with an unambiguous proxy-industry term, e.g. \"mobile proxy vs residential proxy servers\" " +
+        "or \"mobile IP proxies for scraping\".",
+    );
+  }
+
   return results;
+}
+
+// Domain-specific relevance guardrail: this app only ever searches for
+// proxy/scraping-industry topics, so if NONE of the top results mention any
+// vocabulary from that space, Bing's non-JS endpoint has almost certainly
+// keyed off an unrelated dominant meaning of a word in the keyword (observed:
+// "mobile proxies vs residential" returned T-Mobile/Verizon/mobile.de and a
+// Wikipedia page for the city of Mobile, Alabama — "mobile" read as telecom
+// or geography, not the proxy term). Unlike the dictionary-override check,
+// this isn't domain-listable up front (the wrong topic could be anything),
+// so it checks for the PRESENCE of the right topic instead of the absence of
+// specific wrong ones.
+const PROXY_TOPIC_SIGNAL =
+  /\b(proxy|proxies|residential ip|datacenter ip|rotating ip|isp proxy|anti[- ]?detect|web scraping|scraper|scraping|socks5|bot detection|captcha|user agent|vpn|ip rotation)\b/i;
+function looksOffTopic(results: SerpResult[]): boolean {
+  const top = results.slice(0, 8);
+  const hasSignal = top.some((r) => PROXY_TOPIC_SIGNAL.test(r.title) || PROXY_TOPIC_SIGNAL.test(r.snippet));
+  return !hasSignal;
 }
 
 // Bing's non-JS HTML endpoint sometimes falls back to dictionary-definition
