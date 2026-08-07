@@ -29,10 +29,33 @@ export async function runBriefAgent(input: BriefAgentInput): Promise<BriefRunRes
   const SERP_ATTEMPTS = 2;
   let sourcesAnalyzed: { url: string; title: string; wordCount: number; headings: string[] }[] = [];
   let sourcesFailed: { url: string; reason: string }[] = [];
+  // fetchSerp itself can throw (dictionary-override or off-topic-results guardrails,
+  // 0 organic results, request failures) — every one of those calls got a FRESH
+  // proxy session (a new residential exit IP), and different sessions have been
+  // observed to return meaningfully different results for the identical query
+  // (e.g. the same keyword returning telecom-carrier sites on one exit IP and
+  // unrelated local-business results on another, both off-topic but different —
+  // Bing's non-JS ranking appears to lean on the searcher's apparent geolocation
+  // for ambiguous queries). A previous version let fetchSerp's exception unwind
+  // the whole function on attempt 1, silently skipping the second attempt this
+  // loop was supposed to give it. Catch it here so a bad SERP is retried with a
+  // fresh session exactly like a zero-extraction result already was.
+  let lastSerpError: Error | null = null;
 
   for (let attempt = 1; attempt <= SERP_ATTEMPTS; attempt++) {
     logger.info({ keyword, attempt }, "brief agent: fetching SERP");
-    const serp = await fetchSerp(keyword, 10); // fetchSerp already rotates the proxy session each call
+    let serp;
+    try {
+      serp = await fetchSerp(keyword, 10); // fetchSerp already rotates the proxy session each call
+    } catch (err) {
+      lastSerpError = err instanceof Error ? err : new Error(String(err));
+      logger.warn(
+        { keyword, attempt, of: SERP_ATTEMPTS, error: lastSerpError.message },
+        "brief agent: SERP fetch failed, retrying with a fresh proxy session",
+      );
+      continue;
+    }
+    lastSerpError = null; // this attempt's SERP was usable; extraction failures below are tracked separately
 
     logger.info({ keyword, count: serp.length }, "brief agent: extracting competitor articles");
     const extractions = await Promise.allSettled(serp.map((r) => extractArticle(r.url)));
@@ -57,6 +80,12 @@ export async function runBriefAgent(input: BriefAgentInput): Promise<BriefRunRes
   }
 
   if (sourcesAnalyzed.length === 0) {
+    // If the SERP itself was the problem on the final attempt (rather than
+    // extraction), surface that specific, actionable error instead of the
+    // generic one below — it already explains exactly what Bing returned and why.
+    if (lastSerpError) {
+      throw new Error(`${lastSerpError.message} (tried ${SERP_ATTEMPTS} times with a fresh proxy session each time.)`);
+    }
     throw new Error(
       "Could not extract content from any competitor result after retrying. The search engine may be " +
         "returning irrelevant results for this keyword right now, or the competitor sites blocked the " +
